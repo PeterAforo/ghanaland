@@ -4,11 +4,18 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, MapPin, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/feedback/loading-skeleton';
+
+interface InstallmentPackage {
+  id: string;
+  durationMonths: number;
+  interestRate: number;
+  initialDepositPercent: number;
+}
 
 interface Listing {
   id: string;
@@ -29,10 +36,11 @@ interface Listing {
   plotWidth?: number;
   plotDimensionUnit?: string;
   totalPlots?: number;
+  availablePlots?: number;
   pricePerPlot?: string;
   allowOneTimePayment?: boolean;
   allowInstallments?: boolean;
-  installmentPackages?: any[];
+  installmentPackages?: InstallmentPackage[];
   landAccessPercentage?: number;
   sitePlanAccessPercentage?: number;
   documentTransferPercentage?: number;
@@ -51,19 +59,40 @@ export default function EditListingPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Form state
+  // Form state - Basic
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [landType, setLandType] = useState('');
   const [tenureType, setTenureType] = useState('');
+  const [leasePeriodYears, setLeasePeriodYears] = useState<number | ''>('');
+  
+  // Location
   const [region, setRegion] = useState('');
   const [district, setDistrict] = useState('');
+  const [constituency, setConstituency] = useState('');
   const [town, setTown] = useState('');
+  const [address, setAddress] = useState('');
+  const [latitude, setLatitude] = useState<number | ''>('');
+  const [longitude, setLongitude] = useState<number | ''>('');
+  
+  // Plot Details
   const [plotLength, setPlotLength] = useState<number | ''>('');
   const [plotWidth, setPlotWidth] = useState<number | ''>('');
+  const [plotDimensionUnit, setPlotDimensionUnit] = useState('FEET');
   const [totalPlots, setTotalPlots] = useState<number | ''>('');
+  const [availablePlots, setAvailablePlots] = useState<number | ''>('');
   const [pricePerPlot, setPricePerPlot] = useState<number | ''>('');
+  
+  // Payment Options
+  const [allowOneTimePayment, setAllowOneTimePayment] = useState(true);
+  const [allowInstallments, setAllowInstallments] = useState(false);
+  const [installmentPackages, setInstallmentPackages] = useState<InstallmentPackage[]>([]);
+  
+  // Conditions
+  const [landAccessPercentage, setLandAccessPercentage] = useState<number | ''>('');
+  const [sitePlanAccessPercentage, setSitePlanAccessPercentage] = useState<number | ''>('');
+  const [documentTransferPercentage, setDocumentTransferPercentage] = useState<number | ''>('');
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -97,18 +126,41 @@ export default function EditListingPage() {
       if (result.success) {
         const data = result.data;
         setListing(data);
+        
+        // Basic
         setTitle(data.title || '');
         setDescription(data.description || '');
         setCategory(data.category || '');
         setLandType(data.landType || '');
         setTenureType(data.tenureType || '');
+        setLeasePeriodYears(data.leasePeriodYears || '');
+        
+        // Location
         setRegion(data.region || '');
         setDistrict(data.district || '');
+        setConstituency(data.constituency || '');
         setTown(data.town || '');
+        setAddress(data.address || '');
+        setLatitude(data.latitude || '');
+        setLongitude(data.longitude || '');
+        
+        // Plot Details
         setPlotLength(data.plotLength || '');
         setPlotWidth(data.plotWidth || '');
+        setPlotDimensionUnit(data.plotDimensionUnit || 'FEET');
         setTotalPlots(data.totalPlots || '');
+        setAvailablePlots(data.availablePlots || data.totalPlots || '');
         setPricePerPlot(data.pricePerPlot ? parseFloat(data.pricePerPlot) : '');
+        
+        // Payment Options
+        setAllowOneTimePayment(data.allowOneTimePayment ?? true);
+        setAllowInstallments(data.allowInstallments ?? false);
+        setInstallmentPackages(data.installmentPackages || []);
+        
+        // Conditions
+        setLandAccessPercentage(data.landAccessPercentage || '');
+        setSitePlanAccessPercentage(data.sitePlanAccessPercentage || '');
+        setDocumentTransferPercentage(data.documentTransferPercentage || '');
       }
     } catch (err) {
       console.error('Error fetching listing:', err);
@@ -138,13 +190,26 @@ export default function EditListingPage() {
           category,
           landType,
           tenureType,
+          leasePeriodYears: leasePeriodYears || undefined,
           region,
           district,
+          constituency: constituency || undefined,
           town: town || undefined,
+          address: address || undefined,
+          latitude: latitude || undefined,
+          longitude: longitude || undefined,
           plotLength: plotLength || undefined,
           plotWidth: plotWidth || undefined,
+          plotDimensionUnit,
           totalPlots: totalPlots || undefined,
+          availablePlots: availablePlots || undefined,
           pricePerPlot: pricePerPlot || undefined,
+          allowOneTimePayment,
+          allowInstallments,
+          installmentPackages: allowInstallments ? installmentPackages : [],
+          landAccessPercentage: landAccessPercentage || undefined,
+          sitePlanAccessPercentage: sitePlanAccessPercentage || undefined,
+          documentTransferPercentage: documentTransferPercentage || undefined,
         }),
       });
 
@@ -306,7 +371,7 @@ export default function EditListingPage() {
               <CardTitle>Location</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">Region</label>
                   <Input
@@ -325,14 +390,54 @@ export default function EditListingPage() {
                     required
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Constituency</label>
+                  <Input
+                    value={constituency}
+                    onChange={(e) => setConstituency(e.target.value)}
+                    placeholder="e.g., Ningo Prampram"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Town/Area</label>
-                <Input
-                  value={town}
-                  onChange={(e) => setTown(e.target.value)}
-                  placeholder="e.g., East Legon"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Town/Area</label>
+                  <Input
+                    value={town}
+                    onChange={(e) => setTown(e.target.value)}
+                    placeholder="e.g., East Legon"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Address</label>
+                  <Input
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Specific address or landmark"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Latitude</label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={latitude}
+                    onChange={(e) => setLatitude(e.target.value ? Number(e.target.value) : '')}
+                    placeholder="e.g., 5.6037"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Longitude</label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={longitude}
+                    onChange={(e) => setLongitude(e.target.value ? Number(e.target.value) : '')}
+                    placeholder="e.g., -0.1870"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -342,9 +447,9 @@ export default function EditListingPage() {
               <CardTitle>Plot Details & Pricing</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Plot Length (ft)</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">Plot Length</label>
                   <Input
                     type="number"
                     value={plotLength}
@@ -353,7 +458,7 @@ export default function EditListingPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Plot Width (ft)</label>
+                  <label className="block text-sm font-medium text-foreground mb-1">Plot Width</label>
                   <Input
                     type="number"
                     value={plotWidth}
@@ -361,8 +466,19 @@ export default function EditListingPage() {
                     placeholder="e.g., 70"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Unit</label>
+                  <select
+                    value={plotDimensionUnit}
+                    onChange={(e) => setPlotDimensionUnit(e.target.value)}
+                    className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="FEET">Feet</option>
+                    <option value="METERS">Meters</option>
+                  </select>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">Total Plots</label>
                   <Input
@@ -373,12 +489,171 @@ export default function EditListingPage() {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Available Plots</label>
+                  <Input
+                    type="number"
+                    value={availablePlots}
+                    onChange={(e) => setAvailablePlots(e.target.value ? Number(e.target.value) : '')}
+                    placeholder="e.g., 10"
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-foreground mb-1">Price Per Plot (GHS)</label>
                   <Input
                     type="number"
                     value={pricePerPlot}
                     onChange={(e) => setPricePerPlot(e.target.value ? Number(e.target.value) : '')}
                     placeholder="e.g., 50000"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Payment Options</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allowOneTimePayment}
+                    onChange={(e) => setAllowOneTimePayment(e.target.checked)}
+                    className="h-4 w-4 rounded border-input"
+                  />
+                  <span className="text-sm font-medium">Allow One-Time Payment</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allowInstallments}
+                    onChange={(e) => setAllowInstallments(e.target.checked)}
+                    className="h-4 w-4 rounded border-input"
+                  />
+                  <span className="text-sm font-medium">Allow Installments</span>
+                </label>
+              </div>
+              
+              {allowInstallments && (
+                <div className="space-y-3 pt-4 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium">Installment Packages</h4>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setInstallmentPackages([...installmentPackages, {
+                        id: Date.now().toString(),
+                        durationMonths: 12,
+                        interestRate: 0,
+                        initialDepositPercent: 25,
+                      }])}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Package
+                    </Button>
+                  </div>
+                  {installmentPackages.map((pkg, index) => (
+                    <div key={pkg.id} className="grid grid-cols-4 gap-3 p-3 rounded-lg bg-muted/50">
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Duration (months)</label>
+                        <Input
+                          type="number"
+                          value={pkg.durationMonths}
+                          onChange={(e) => {
+                            const updated = [...installmentPackages];
+                            updated[index].durationMonths = Number(e.target.value);
+                            setInstallmentPackages(updated);
+                          }}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Interest Rate (%)</label>
+                        <Input
+                          type="number"
+                          value={pkg.interestRate}
+                          onChange={(e) => {
+                            const updated = [...installmentPackages];
+                            updated[index].interestRate = Number(e.target.value);
+                            setInstallmentPackages(updated);
+                          }}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Initial Deposit (%)</label>
+                        <Input
+                          type="number"
+                          value={pkg.initialDepositPercent}
+                          onChange={(e) => {
+                            const updated = [...installmentPackages];
+                            updated[index].initialDepositPercent = Number(e.target.value);
+                            setInstallmentPackages(updated);
+                          }}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => setInstallmentPackages(installmentPackages.filter((_, i) => i !== index))}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Payment Milestones</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Set the percentage of payment required at each milestone
+              </p>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Land Access (%)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={landAccessPercentage}
+                    onChange={(e) => setLandAccessPercentage(e.target.value ? Number(e.target.value) : '')}
+                    placeholder="e.g., 50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Site Plan Access (%)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={sitePlanAccessPercentage}
+                    onChange={(e) => setSitePlanAccessPercentage(e.target.value ? Number(e.target.value) : '')}
+                    placeholder="e.g., 50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Document Transfer (%)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={documentTransferPercentage}
+                    onChange={(e) => setDocumentTransferPercentage(e.target.value ? Number(e.target.value) : '')}
+                    placeholder="e.g., 100"
                   />
                 </div>
               </div>

@@ -374,7 +374,7 @@ export default function UserListingsPage() {
                           <Badge variant="pending">Pending Review</Badge>
                         )}
                         
-                        <Link href={`/listings/${listing.id}`}>
+                        <Link href={`/dashboard/listings/${listing.id}`}>
                           <Button variant="ghost" size="sm">
                             <Eye className="h-4 w-4 mr-1" />
                             View
