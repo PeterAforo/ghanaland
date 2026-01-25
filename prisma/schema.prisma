@@ -168,17 +168,39 @@ model Listing {
   landType          LandType          @map("land_type")
   tenureType        TenureType        @map("tenure_type")
   leasePeriodYears  Int?              @map("lease_period_years")
-  sizeAcres         Decimal           @map("size_acres") @db.Decimal(10, 4)
-  priceGhs          Decimal           @map("price_ghs") @db.Decimal(15, 2)
+  sizeAcres         Decimal           @default(0) @map("size_acres") @db.Decimal(10, 4)
+  priceGhs          Decimal           @default(0) @map("price_ghs") @db.Decimal(15, 2)
   currency          String            @default("GHS")
+  
+  // Per-plot pricing fields
+  plotLength        Float?            @map("plot_length")
+  plotWidth         Float?            @map("plot_width")
+  plotDimensionUnit String?           @default("FEET") @map("plot_dimension_unit")
+  totalPlots        Int?              @map("total_plots")
+  availablePlots    Int?              @map("available_plots")
+  pricePerPlot      Decimal?          @map("price_per_plot") @db.Decimal(15, 2)
+  
+  // Payment options
+  allowOneTimePayment  Boolean        @default(true) @map("allow_one_time_payment")
+  allowInstallments    Boolean        @default(false) @map("allow_installments")
+  installmentPackages  Json?          @map("installment_packages")
+  
+  // Payment milestones
+  landAccessPercentage       Int?     @map("land_access_percentage")
+  sitePlanAccessPercentage   Int?     @map("site_plan_access_percentage")
+  documentTransferPercentage Int?     @map("document_transfer_percentage")
+  
+  // Location
   region            String
   district          String
+  constituency      String?
   town              String?
   address           String?
   latitude          Float?
   longitude         Float?
   geometry          Unsupported("geometry(MultiPolygon, 4326)")?
   bbox              Unsupported("geometry(Polygon, 4326)")?
+  
   listingStatus     ListingStatus     @default(DRAFT) @map("listing_status")
   verificationStatus VerificationStatus @default(UNVERIFIED) @map("verification_status")
   verifiedAt        DateTime?         @map("verified_at")
