@@ -1,29 +1,6 @@
 // Ghana Lands - Shared Constants
 
-// ============================================================================
-// Ghana Regions & Districts
-// ============================================================================
-
-export const GHANA_REGIONS = [
-  'Greater Accra',
-  'Ashanti',
-  'Western',
-  'Eastern',
-  'Central',
-  'Northern',
-  'Volta',
-  'Upper East',
-  'Upper West',
-  'Bono',
-  'Bono East',
-  'Ahafo',
-  'Western North',
-  'Oti',
-  'North East',
-  'Savannah',
-] as const;
-
-export type GhanaRegion = (typeof GHANA_REGIONS)[number];
+// Note: Full Ghana regions/constituencies/districts data is in ghana-locations.ts
 
 // ============================================================================
 // Queue Names
