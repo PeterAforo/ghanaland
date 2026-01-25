@@ -1,7 +1,8 @@
 'use client';
 
-import { use, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -78,8 +79,9 @@ interface ListingDetail {
   };
 }
 
-export default function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function ListingDetailPage() {
+  const params = useParams();
+  const id = params.id as string;
   
   // Buyer state
   const [selectedPlots, setSelectedPlots] = useState(1);
