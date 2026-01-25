@@ -312,4 +312,58 @@ export class ListingsService {
       error: null,
     };
   }
+
+  async updateStatus(userId: string, id: string, status: string) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id },
+    });
+
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    if (listing.sellerId !== userId) {
+      throw new ForbiddenException('You can only update your own listings');
+    }
+
+    // Validate status transitions
+    const validStatuses = ['DRAFT', 'SUBMITTED', 'PUBLISHED', 'ARCHIVED'];
+    if (!validStatuses.includes(status)) {
+      throw new ForbiddenException(`Invalid status: ${status}`);
+    }
+
+    // Business rules for status transitions
+    const currentStatus = listing.listingStatus;
+    
+    // DRAFT can go to SUBMITTED or PUBLISHED
+    // SUBMITTED can go to PUBLISHED (by admin) or back to DRAFT
+    // PUBLISHED can go to ARCHIVED or DRAFT
+    // For now, allow owner to publish directly (can add admin approval later)
+    
+    const updateData: any = {
+      listingStatus: status,
+    };
+
+    // Set publishedAt when publishing
+    if (status === 'PUBLISHED' && currentStatus !== 'PUBLISHED') {
+      updateData.publishedAt = new Date();
+    }
+
+    const updated = await this.prisma.listing.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return {
+      success: true,
+      data: {
+        ...updated,
+        priceGhs: updated.priceGhs.toString(),
+        sizeAcres: updated.sizeAcres.toString(),
+        pricePerPlot: updated.pricePerPlot?.toString() || null,
+      },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
 }

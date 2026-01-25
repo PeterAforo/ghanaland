@@ -18,6 +18,9 @@ import {
   Clock,
   XCircle,
   AlertCircle,
+  Send,
+  Globe,
+  Archive,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -144,6 +147,43 @@ export default function UserListingsPage() {
       setError('Failed to delete listing. Please try again.');
     } finally {
       setDeleteId(null);
+    }
+  };
+
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    const statusLabels: Record<string, string> = {
+      PUBLISHED: 'publish',
+      SUBMITTED: 'submit for review',
+      DRAFT: 'unpublish',
+      ARCHIVED: 'archive',
+    };
+    
+    if (!confirm(`Are you sure you want to ${statusLabels[newStatus] || newStatus.toLowerCase()} this listing?`)) return;
+    
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`/api/v1/listings/${id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update listing status');
+      }
+
+      const result = await res.json();
+      if (result.success) {
+        setListings(listings.map(l => l.id === id ? { ...l, listingStatus: newStatus } : l));
+        setSuccessMessage(`Listing ${statusLabels[newStatus] || 'updated'} successfully!`);
+        setTimeout(() => setSuccessMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error('Error updating listing status:', err);
+      setError('Failed to update listing status. Please try again.');
     }
   };
 
@@ -309,6 +349,31 @@ export default function UserListingsPage() {
 
                       {/* Actions */}
                       <div className="flex items-center gap-2">
+                        {/* Publish/Unpublish Button */}
+                        {listing.listingStatus === 'DRAFT' && (
+                          <Button 
+                            variant="primary" 
+                            size="sm"
+                            onClick={() => handleStatusChange(listing.id, 'PUBLISHED')}
+                          >
+                            <Globe className="h-4 w-4 mr-1" />
+                            Publish
+                          </Button>
+                        )}
+                        {listing.listingStatus === 'PUBLISHED' && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleStatusChange(listing.id, 'DRAFT')}
+                          >
+                            <Archive className="h-4 w-4 mr-1" />
+                            Unpublish
+                          </Button>
+                        )}
+                        {listing.listingStatus === 'SUBMITTED' && (
+                          <Badge variant="pending">Pending Review</Badge>
+                        )}
+                        
                         <Link href={`/listings/${listing.id}`}>
                           <Button variant="ghost" size="sm">
                             <Eye className="h-4 w-4 mr-1" />

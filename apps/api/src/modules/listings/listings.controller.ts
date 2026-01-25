@@ -60,4 +60,16 @@ export class ListingsController {
   async delete(@Request() req: any, @Param('id') id: string) {
     return this.listingsService.delete(req.user.id, id);
   }
+
+  @Put(':id/status')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update listing status (submit/publish)' })
+  async updateStatus(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: { status: string },
+  ) {
+    return this.listingsService.updateStatus(req.user.id, id, dto.status);
+  }
 }
