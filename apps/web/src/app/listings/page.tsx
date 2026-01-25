@@ -49,6 +49,8 @@ interface Listing {
   landType: string;
   sizeAcres: string;
   priceGhs: string;
+  pricePerPlot?: string;
+  totalPlots?: number;
   region: string;
   district: string;
   verificationStatus: string;
@@ -212,9 +214,20 @@ export default function ListingsPage() {
   );
 }
 
+function formatCategory(category: string): string {
+  const categoryMap: Record<string, string> = {
+    'RESIDENTIAL': 'Residential',
+    'COMMERCIAL': 'Commercial',
+    'INDUSTRIAL': 'Industrial',
+    'AGRICULTURAL': 'Agricultural',
+    'MIXED_USE': 'Mixed Use',
+  };
+  return categoryMap[category] || category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
 function ListingCard({ listing, viewMode }: { listing: Listing; viewMode: 'grid' | 'list' }) {
   const isVerified = listing.verificationStatus === 'VERIFIED';
-  const imageUrl = listing.media?.[0]?.url || '/placeholder-land.jpg';
+  const imageUrl = listing.media?.[0]?.url;
 
   if (viewMode === 'list') {
     return (
@@ -222,9 +235,13 @@ function ListingCard({ listing, viewMode }: { listing: Listing; viewMode: 'grid'
         <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-4 flex gap-4">
             <div className="w-32 h-24 rounded-xl bg-muted overflow-hidden flex-shrink-0">
-              <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                <MapPin className="h-8 w-8 text-primary/40" />
-              </div>
+              {imageUrl ? (
+                <img src={imageUrl} alt={listing.title} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <MapPin className="h-8 w-8 text-primary/40" />
+                </div>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
@@ -241,12 +258,19 @@ function ListingCard({ listing, viewMode }: { listing: Listing; viewMode: 'grid'
                 {listing.district}, {listing.region}
               </p>
               <div className="flex items-center justify-between mt-2">
-                <p className="text-lg font-bold text-primary">
-                  {formatPrice(parseFloat(listing.priceGhs))}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {listing.sizeAcres} acres
-                </p>
+                <div>
+                  <p className="text-lg font-bold text-primary">
+                    {listing.pricePerPlot ? formatPrice(parseFloat(listing.pricePerPlot)) : formatPrice(parseFloat(listing.priceGhs))}
+                  </p>
+                  {listing.pricePerPlot && (
+                    <p className="text-xs text-muted-foreground">per plot</p>
+                  )}
+                </div>
+                {listing.totalPlots && (
+                  <p className="text-sm text-muted-foreground">
+                    {listing.totalPlots} plots
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -259,17 +283,21 @@ function ListingCard({ listing, viewMode }: { listing: Listing; viewMode: 'grid'
     <Link href={`/listings/${listing.id}`}>
       <Card className="hover:shadow-md transition-shadow overflow-hidden">
         <div className="aspect-[4/3] bg-muted relative">
-          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-            <MapPin className="h-12 w-12 text-primary/40" />
-          </div>
+          {imageUrl ? (
+            <img src={imageUrl} alt={listing.title} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+              <MapPin className="h-12 w-12 text-primary/40" />
+            </div>
+          )}
           {isVerified && (
             <Badge variant="verified" className="absolute top-3 right-3">
               <Shield className="h-3 w-3 mr-1" />
               Verified
             </Badge>
           )}
-          <Badge variant="neutral" className="absolute top-3 left-3 capitalize">
-            {listing.category.toLowerCase()}
+          <Badge variant="neutral" className="absolute top-3 left-3">
+            {formatCategory(listing.category)}
           </Badge>
         </div>
         <CardContent className="p-4">
@@ -279,12 +307,19 @@ function ListingCard({ listing, viewMode }: { listing: Listing; viewMode: 'grid'
             {listing.district}, {listing.region}
           </p>
           <div className="flex items-center justify-between mt-3">
-            <p className="text-lg font-bold text-primary">
-              {formatPrice(parseFloat(listing.priceGhs))}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {listing.sizeAcres} acres
-            </p>
+            <div>
+              <p className="text-lg font-bold text-primary">
+                {listing.pricePerPlot ? formatPrice(parseFloat(listing.pricePerPlot)) : formatPrice(parseFloat(listing.priceGhs))}
+              </p>
+              {listing.pricePerPlot && (
+                <p className="text-xs text-muted-foreground">per plot</p>
+              )}
+            </div>
+            {listing.totalPlots && (
+              <p className="text-sm text-muted-foreground">
+                {listing.totalPlots} plots
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
