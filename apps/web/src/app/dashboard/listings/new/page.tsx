@@ -21,6 +21,9 @@ import {
   Calculator,
   Info,
   Trash2,
+  Navigation,
+  Plus,
+  Percent,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,9 +39,10 @@ import {
 
 const STEPS = [
   { id: 'basics', title: 'Listing Basics', description: 'Title & category' },
-  { id: 'location', title: 'Location', description: 'Region, constituency & district' },
-  { id: 'sizing', title: 'Land Size', description: 'Acres or plots with dimensions' },
-  { id: 'pricing', title: 'Pricing & Payment', description: 'Price & payment options' },
+  { id: 'location', title: 'Location', description: 'Region, GPS coordinates' },
+  { id: 'sizing', title: 'Land Size', description: 'Plots with dimensions' },
+  { id: 'pricing', title: 'Pricing', description: 'Price per plot' },
+  { id: 'payment', title: 'Payment Plans', description: 'Installment packages' },
   { id: 'conditions', title: 'Conditions', description: 'Access & document transfer' },
   { id: 'media', title: 'Media', description: 'Photos & video' },
   { id: 'review', title: 'Review', description: 'Confirm & publish' },
@@ -66,22 +70,19 @@ const TENURE_TYPES = [
   { value: 'CUSTOMARY', label: 'Customary' },
 ];
 
-const SIZE_UNITS = [
-  { value: 'ACRES', label: 'Acres' },
-  { value: 'PLOTS', label: 'Plots' },
-];
+interface InstallmentPackage {
+  id: string;
+  durationMonths: number;
+  interestRate: number;
+  initialDepositPercent: number;
+}
 
-const PAYMENT_TYPES = [
-  { value: 'ONE_TIME', label: 'One-Time Payment', description: 'Full payment upfront' },
-  { value: 'INSTALLMENT', label: 'Installment Plan', description: 'Pay over time' },
-];
-
-const INSTALLMENT_FREQUENCIES = [
-  { value: 'WEEKLY', label: 'Weekly', periodsPerYear: 52 },
-  { value: 'MONTHLY', label: 'Monthly', periodsPerYear: 12 },
-  { value: 'QUARTERLY', label: 'Quarterly', periodsPerYear: 4 },
-  { value: 'YEARLY', label: 'Yearly', periodsPerYear: 1 },
-];
+const installmentPackageSchema = z.object({
+  id: z.string(),
+  durationMonths: z.number().int().positive(),
+  interestRate: z.number().min(0).max(100),
+  initialDepositPercent: z.number().min(0).max(100),
+});
 
 const listingSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters').max(200),
@@ -97,24 +98,21 @@ const listingSchema = z.object({
   district: z.string().min(1, 'District is required'),
   town: z.string().optional(),
   address: z.string().optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
   
-  // Sizing
-  sizeUnit: z.enum(['ACRES', 'PLOTS']),
-  totalSize: z.number().positive('Size must be positive'),
-  plotLength: z.number().positive().optional(),
-  plotWidth: z.number().positive().optional(),
-  plotDimensionUnit: z.enum(['FEET', 'METERS']).optional(),
-  numberOfPlots: z.number().int().positive().optional(),
+  // Sizing - Per Plot
+  plotLength: z.number().positive('Length is required'),
+  plotWidth: z.number().positive('Width is required'),
+  plotDimensionUnit: z.enum(['FEET', 'METERS']),
+  totalPlots: z.number().int().positive('Number of plots is required'),
   
-  // Pricing
-  pricePerUnit: z.number().positive('Price must be positive'),
-  totalPrice: z.number().positive().optional(),
+  // Pricing - Per Plot
+  pricePerPlot: z.number().positive('Price per plot is required'),
   
   // Payment Options
-  paymentType: z.enum(['ONE_TIME', 'INSTALLMENT']),
-  installmentDurationMonths: z.number().int().positive().optional(),
-  installmentFrequency: z.enum(['WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY']).optional(),
-  initialDeposit: z.number().min(0).optional(),
+  allowOneTimePayment: z.boolean(),
+  allowInstallments: z.boolean(),
   
   // Conditions
   landAccessPercentage: z.number().min(0).max(100).optional(),
@@ -139,10 +137,20 @@ export default function NewListingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // GPS state
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  
+  // Installment packages
+  const [installmentPackages, setInstallmentPackages] = useState<InstallmentPackage[]>([
+    { id: '1', durationMonths: 6, interestRate: 0, initialDepositPercent: 20 },
+    { id: '2', durationMonths: 12, interestRate: 5, initialDepositPercent: 15 },
+    { id: '3', durationMonths: 24, interestRate: 10, initialDepositPercent: 10 },
+  ]);
+  
   // Media uploads
   const [images, setImages] = useState<UploadedFile[]>([]);
   const [video, setVideo] = useState<UploadedFile | null>(null);
-  const [documents, setDocuments] = useState<UploadedFile[]>([]);
 
   const {
     register,
@@ -157,10 +165,9 @@ export default function NewListingPage() {
       category: 'RESIDENTIAL',
       landType: 'TITLED',
       tenureType: 'FREEHOLD',
-      sizeUnit: 'PLOTS',
       plotDimensionUnit: 'FEET',
-      paymentType: 'ONE_TIME',
-      installmentFrequency: 'MONTHLY',
+      allowOneTimePayment: true,
+      allowInstallments: true,
       landAccessPercentage: 30,
       sitePlanAccessPercentage: 50,
       documentTransferPercentage: 100,
@@ -194,53 +201,98 @@ export default function NewListingPage() {
     }
   }, [formValues.constituency, setValue]);
 
-  // Calculate installment details
-  const installmentCalculation = useMemo(() => {
-    if (formValues.paymentType !== 'INSTALLMENT') return null;
+  // Seller financial calculations
+  const sellerFinancials = useMemo(() => {
+    const pricePerPlot = formValues.pricePerPlot || 0;
+    const totalPlots = formValues.totalPlots || 0;
+    const totalRevenue = pricePerPlot * totalPlots;
     
-    const totalPrice = formValues.pricePerUnit * (formValues.totalSize || 1);
-    const deposit = formValues.initialDeposit || 0;
-    const remaining = totalPrice - deposit;
-    const durationMonths = formValues.installmentDurationMonths || 12;
-    
-    const frequency = INSTALLMENT_FREQUENCIES.find(f => f.value === formValues.installmentFrequency);
-    if (!frequency) return null;
-    
-    let numberOfPayments: number;
-    switch (formValues.installmentFrequency) {
-      case 'WEEKLY':
-        numberOfPayments = Math.ceil((durationMonths / 12) * 52);
-        break;
-      case 'MONTHLY':
-        numberOfPayments = durationMonths;
-        break;
-      case 'QUARTERLY':
-        numberOfPayments = Math.ceil(durationMonths / 3);
-        break;
-      case 'YEARLY':
-        numberOfPayments = Math.ceil(durationMonths / 12);
-        break;
-      default:
-        numberOfPayments = durationMonths;
-    }
-    
-    const paymentAmount = remaining / numberOfPayments;
+    // Calculate for each installment package
+    const packageFinancials = installmentPackages.map(pkg => {
+      const interestAmount = (pricePerPlot * pkg.interestRate) / 100;
+      const priceWithInterest = pricePerPlot + interestAmount;
+      const initialDeposit = (pricePerPlot * pkg.initialDepositPercent) / 100;
+      const remainingAfterDeposit = priceWithInterest - initialDeposit;
+      const monthlyPayment = remainingAfterDeposit / pkg.durationMonths;
+      
+      return {
+        ...pkg,
+        priceWithInterest,
+        initialDeposit,
+        monthlyPayment,
+        totalPerPlot: priceWithInterest,
+        totalAllPlots: priceWithInterest * totalPlots,
+        totalInitialAllPlots: initialDeposit * totalPlots,
+        monthlyAllPlots: monthlyPayment * totalPlots,
+      };
+    });
     
     return {
-      totalPrice,
-      deposit,
-      remaining,
-      numberOfPayments,
-      paymentAmount,
-      frequency: frequency.label,
+      pricePerPlot,
+      totalPlots,
+      totalRevenue,
+      packageFinancials,
     };
-  }, [formValues.paymentType, formValues.pricePerUnit, formValues.totalSize, formValues.initialDeposit, formValues.installmentDurationMonths, formValues.installmentFrequency]);
+  }, [formValues.pricePerPlot, formValues.totalPlots, installmentPackages]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/auth/login');
     }
   }, [authLoading, isAuthenticated, router]);
+
+  // Get current GPS location
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      return;
+    }
+    
+    setIsGettingLocation(true);
+    setLocationError(null);
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setValue('latitude', position.coords.latitude);
+        setValue('longitude', position.coords.longitude);
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        setLocationError(
+          error.code === 1 ? 'Location permission denied' :
+          error.code === 2 ? 'Location unavailable' :
+          'Location request timed out'
+        );
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  // Installment package management
+  const addInstallmentPackage = () => {
+    const newPackage: InstallmentPackage = {
+      id: Date.now().toString(),
+      durationMonths: 12,
+      interestRate: 0,
+      initialDepositPercent: 20,
+    };
+    setInstallmentPackages([...installmentPackages, newPackage]);
+  };
+
+  const updateInstallmentPackage = (id: string, field: keyof InstallmentPackage, value: number) => {
+    setInstallmentPackages(packages =>
+      packages.map(pkg =>
+        pkg.id === id ? { ...pkg, [field]: value } : pkg
+      )
+    );
+  };
+
+  const removeInstallmentPackage = (id: string) => {
+    if (installmentPackages.length > 1) {
+      setInstallmentPackages(packages => packages.filter(pkg => pkg.id !== id));
+    }
+  };
 
   const validateStep = async () => {
     switch (currentStep) {
@@ -249,12 +301,14 @@ export default function NewListingPage() {
       case 1:
         return await trigger(['region', 'constituency', 'district', 'town', 'address']);
       case 2:
-        return await trigger(['sizeUnit', 'totalSize', 'plotLength', 'plotWidth', 'numberOfPlots']);
+        return await trigger(['plotLength', 'plotWidth', 'plotDimensionUnit', 'totalPlots']);
       case 3:
-        return await trigger(['pricePerUnit', 'paymentType', 'installmentDurationMonths', 'installmentFrequency', 'initialDeposit']);
+        return await trigger(['pricePerPlot']);
       case 4:
-        return await trigger(['landAccessPercentage', 'sitePlanAccessPercentage', 'documentTransferPercentage']);
+        return await trigger(['allowOneTimePayment', 'allowInstallments']);
       case 5:
+        return await trigger(['landAccessPercentage', 'sitePlanAccessPercentage', 'documentTransferPercentage']);
+      case 6:
         return true; // Media step
       default:
         return true;
@@ -319,14 +373,9 @@ export default function NewListingPage() {
     try {
       const token = localStorage.getItem('accessToken');
       
-      // Calculate total price
-      const totalPrice = data.pricePerUnit * data.totalSize;
-      
       const payload = {
         ...data,
-        totalPrice,
-        priceGhs: totalPrice,
-        sizeAcres: data.sizeUnit === 'ACRES' ? data.totalSize : data.totalSize * 0.1, // Approximate conversion
+        installmentPackages,
         images: images.map(img => img.url),
         videoUrl: video?.url,
       };
@@ -386,12 +435,13 @@ export default function NewListingPage() {
             <CardTitle className="text-xl">{STEPS[currentStep].title}</CardTitle>
             <CardDescription>
               {currentStep === 0 && 'Provide basic information about your land'}
-              {currentStep === 1 && 'Where is your land located?'}
-              {currentStep === 2 && 'Specify the size of your land'}
-              {currentStep === 3 && 'Set your price and payment options'}
-              {currentStep === 4 && 'Define conditions for buyers'}
-              {currentStep === 5 && 'Upload photos and video of your land'}
-              {currentStep === 6 && 'Review your listing before publishing'}
+              {currentStep === 1 && 'Where is your land located? Include GPS coordinates'}
+              {currentStep === 2 && 'Specify plot dimensions and quantity'}
+              {currentStep === 3 && 'Set your price per plot'}
+              {currentStep === 4 && 'Configure payment plans and installment options'}
+              {currentStep === 5 && 'Define conditions for buyers'}
+              {currentStep === 6 && 'Upload photos and video of your land'}
+              {currentStep === 7 && 'Review your listing before publishing'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -409,7 +459,7 @@ export default function NewListingPage() {
                     <label className="text-sm font-medium text-foreground">Title</label>
                     <Input
                       {...register('title')}
-                      placeholder="e.g., 5 Plots of Prime Land in East Legon"
+                      placeholder="e.g., 1500 Plots of Prime Land in East Legon"
                     />
                     {errors.title && (
                       <p className="text-xs text-destructive">{errors.title.message}</p>
@@ -479,7 +529,7 @@ export default function NewListingPage() {
                 </div>
               )}
 
-              {/* Step 2: Location */}
+              {/* Step 2: Location with GPS */}
               {currentStep === 1 && (
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -500,42 +550,44 @@ export default function NewListingPage() {
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Constituency</label>
-                    <select
-                      {...register('constituency')}
-                      disabled={!formValues.region}
-                      className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-                    >
-                      <option value="">Select constituency</option>
-                      {constituencies.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.constituency && (
-                      <p className="text-xs text-destructive">{errors.constituency.message}</p>
-                    )}
-                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">Constituency</label>
+                      <select
+                        {...register('constituency')}
+                        disabled={!formValues.region}
+                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                      >
+                        <option value="">Select constituency</option>
+                        {constituencies.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.constituency && (
+                        <p className="text-xs text-destructive">{errors.constituency.message}</p>
+                      )}
+                    </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">District</label>
-                    <select
-                      {...register('district')}
-                      disabled={!formValues.constituency}
-                      className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-                    >
-                      <option value="">Select district</option>
-                      {districts.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.district && (
-                      <p className="text-xs text-destructive">{errors.district.message}</p>
-                    )}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">District</label>
+                      <select
+                        {...register('district')}
+                        disabled={!formValues.constituency}
+                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                      >
+                        <option value="">Select district</option>
+                        {districts.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.district && (
+                        <p className="text-xs text-destructive">{errors.district.message}</p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -554,245 +606,354 @@ export default function NewListingPage() {
                     </div>
                   </div>
 
-                  {/* Map placeholder */}
-                  <div className="rounded-xl border border-border bg-muted/50 h-48 flex items-center justify-center">
-                    <div className="text-center text-muted-foreground">
-                      <MapPin className="h-8 w-8 mx-auto mb-2" />
-                      <p className="text-sm">Map view coming soon</p>
+                  {/* GPS Coordinates */}
+                  <div className="p-4 rounded-xl bg-muted/50 border border-border">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">GPS Coordinates</p>
+                        <p className="text-xs text-muted-foreground">Get your current location or enter manually</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={getCurrentLocation}
+                        disabled={isGettingLocation}
+                      >
+                        {isGettingLocation ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Navigation className="h-4 w-4 mr-2" />
+                        )}
+                        Get Current Location
+                      </Button>
                     </div>
+
+                    {locationError && (
+                      <p className="text-xs text-destructive mb-3">{locationError}</p>
+                    )}
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Latitude</label>
+                        <Input
+                          {...register('latitude', { valueAsNumber: true })}
+                          type="number"
+                          step="any"
+                          placeholder="e.g., 5.6037"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Longitude</label>
+                        <Input
+                          {...register('longitude', { valueAsNumber: true })}
+                          type="number"
+                          step="any"
+                          placeholder="e.g., -0.1870"
+                        />
+                      </div>
+                    </div>
+
+                    {formValues.latitude && formValues.longitude && (
+                      <div className="mt-3 p-2 rounded-lg bg-primary/5 border border-primary/20">
+                        <p className="text-xs text-primary flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          Location set: {formValues.latitude.toFixed(6)}, {formValues.longitude.toFixed(6)}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* Step 3: Land Size */}
+              {/* Step 3: Land Size - Per Plot */}
               {currentStep === 2 && (
                 <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Size Unit</label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {SIZE_UNITS.map((unit) => (
-                        <button
-                          key={unit.value}
-                          type="button"
-                          onClick={() => setValue('sizeUnit', unit.value as any)}
-                          className={`p-4 rounded-xl border-2 text-center transition-colors ${
-                            formValues.sizeUnit === unit.value
-                              ? 'border-primary bg-primary/5'
-                              : 'border-border hover:border-primary/50'
-                          }`}
+                  <div className="p-4 rounded-xl bg-muted/50 border border-border">
+                    <p className="text-sm font-medium text-foreground mb-3">Plot Dimensions</p>
+                    <p className="text-xs text-muted-foreground mb-4">Define the size of each individual plot</p>
+                    
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Length</label>
+                        <Input
+                          {...register('plotLength', { valueAsNumber: true })}
+                          type="number"
+                          placeholder="e.g., 100"
+                        />
+                        {errors.plotLength && (
+                          <p className="text-xs text-destructive">{errors.plotLength.message}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Width</label>
+                        <Input
+                          {...register('plotWidth', { valueAsNumber: true })}
+                          type="number"
+                          placeholder="e.g., 70"
+                        />
+                        {errors.plotWidth && (
+                          <p className="text-xs text-destructive">{errors.plotWidth.message}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Unit</label>
+                        <select
+                          {...register('plotDimensionUnit')}
+                          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
                         >
-                          <p className="font-medium text-foreground">{unit.label}</p>
-                        </button>
-                      ))}
+                          <option value="FEET">Feet</option>
+                          <option value="METERS">Meters</option>
+                        </select>
+                      </div>
                     </div>
+
+                    {formValues.plotLength && formValues.plotWidth && (
+                      <p className="text-sm text-muted-foreground mt-3">
+                        Each plot: <span className="font-medium text-foreground">{formValues.plotLength} × {formValues.plotWidth} {formValues.plotDimensionUnit?.toLowerCase()}</span>
+                        {' '}= <span className="font-medium text-foreground">{(formValues.plotLength * formValues.plotWidth).toLocaleString()} sq {formValues.plotDimensionUnit?.toLowerCase()}</span>
+                      </p>
+                    )}
                   </div>
 
-                  {formValues.sizeUnit === 'PLOTS' && (
-                    <>
-                      <div className="p-4 rounded-xl bg-muted/50 border border-border">
-                        <p className="text-sm font-medium text-foreground mb-3">Plot Dimensions</p>
-                        <div className="grid gap-4 sm:grid-cols-3">
-                          <div className="space-y-2">
-                            <label className="text-xs text-muted-foreground">Length</label>
-                            <Input
-                              {...register('plotLength', { valueAsNumber: true })}
-                              type="number"
-                              placeholder="e.g., 100"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs text-muted-foreground">Width</label>
-                            <Input
-                              {...register('plotWidth', { valueAsNumber: true })}
-                              type="number"
-                              placeholder="e.g., 70"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs text-muted-foreground">Unit</label>
-                            <select
-                              {...register('plotDimensionUnit')}
-                              className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                            >
-                              <option value="FEET">Feet</option>
-                              <option value="METERS">Meters</option>
-                            </select>
-                          </div>
-                        </div>
-                        {formValues.plotLength && formValues.plotWidth && (
-                          <p className="text-sm text-muted-foreground mt-3">
-                            Each plot: <span className="font-medium text-foreground">{formValues.plotLength} x {formValues.plotWidth} {formValues.plotDimensionUnit?.toLowerCase()}</span>
-                            {' '}= <span className="font-medium text-foreground">{(formValues.plotLength * formValues.plotWidth).toLocaleString()} sq {formValues.plotDimensionUnit?.toLowerCase()}</span>
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground">Number of Plots Available</label>
-                        <Input
-                          {...register('totalSize', { valueAsNumber: true })}
-                          type="number"
-                          placeholder="e.g., 10"
-                        />
-                        {errors.totalSize && (
-                          <p className="text-xs text-destructive">{errors.totalSize.message}</p>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {formValues.sizeUnit === 'ACRES' && (
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Total Acres</label>
-                      <Input
-                        {...register('totalSize', { valueAsNumber: true })}
-                        type="number"
-                        step="0.01"
-                        placeholder="e.g., 5.5"
-                      />
-                      {errors.totalSize && (
-                        <p className="text-xs text-destructive">{errors.totalSize.message}</p>
-                      )}
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Total Number of Plots Available</label>
+                    <Input
+                      {...register('totalPlots', { valueAsNumber: true })}
+                      type="number"
+                      placeholder="e.g., 1500"
+                    />
+                    {errors.totalPlots && (
+                      <p className="text-xs text-destructive">{errors.totalPlots.message}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      How many plots are you selling in total?
+                    </p>
+                  </div>
                 </div>
               )}
 
-              {/* Step 4: Pricing & Payment */}
+              {/* Step 4: Pricing - Per Plot */}
               {currentStep === 3 && (
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-foreground">
-                      Price per {formValues.sizeUnit === 'PLOTS' ? 'Plot' : 'Acre'} (GHS)
+                      Price Per Plot (GHS)
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">GHS</span>
                       <Input
-                        {...register('pricePerUnit', { valueAsNumber: true })}
+                        {...register('pricePerPlot', { valueAsNumber: true })}
                         type="number"
                         placeholder="e.g., 40000"
                         className="pl-12"
                       />
                     </div>
-                    {errors.pricePerUnit && (
-                      <p className="text-xs text-destructive">{errors.pricePerUnit.message}</p>
+                    {errors.pricePerPlot && (
+                      <p className="text-xs text-destructive">{errors.pricePerPlot.message}</p>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      This is the base price for one plot (before any interest)
+                    </p>
                   </div>
 
-                  {formValues.pricePerUnit && formValues.totalSize && (
+                  {formValues.pricePerPlot && formValues.totalPlots && (
                     <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
-                      <p className="text-sm text-muted-foreground">Total Land Value</p>
-                      <p className="text-2xl font-bold text-primary">
-                        GHS {(formValues.pricePerUnit * formValues.totalSize).toLocaleString()}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formValues.totalSize} {formValues.sizeUnit === 'PLOTS' ? 'plots' : 'acres'} × GHS {formValues.pricePerUnit.toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Payment Type</label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {PAYMENT_TYPES.map((type) => (
-                        <button
-                          key={type.value}
-                          type="button"
-                          onClick={() => setValue('paymentType', type.value as any)}
-                          className={`p-4 rounded-xl border-2 text-left transition-colors ${
-                            formValues.paymentType === type.value
-                              ? 'border-primary bg-primary/5'
-                              : 'border-border hover:border-primary/50'
-                          }`}
-                        >
-                          <p className="font-medium text-foreground">{type.label}</p>
-                          <p className="text-xs text-muted-foreground">{type.description}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {formValues.paymentType === 'INSTALLMENT' && (
-                    <div className="p-4 rounded-xl bg-muted/50 border border-border space-y-4">
-                      <p className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <Calculator className="h-4 w-4" />
-                        Installment Plan Settings
-                      </p>
-
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <label className="text-xs text-muted-foreground">Payment Duration (months)</label>
-                          <Input
-                            {...register('installmentDurationMonths', { valueAsNumber: true })}
-                            type="number"
-                            placeholder="e.g., 12"
-                          />
+                      <p className="text-sm font-medium text-foreground mb-3">Seller Financial Summary</p>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Price per plot:</span>
+                          <span className="font-medium">GHS {formValues.pricePerPlot.toLocaleString()}</span>
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-xs text-muted-foreground">Payment Frequency</label>
-                          <select
-                            {...register('installmentFrequency')}
-                            className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                          >
-                            {INSTALLMENT_FREQUENCIES.map((f) => (
-                              <option key={f.value} value={f.value}>
-                                {f.label}
-                              </option>
-                            ))}
-                          </select>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Total plots:</span>
+                          <span className="font-medium">{formValues.totalPlots.toLocaleString()}</span>
                         </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">Initial Deposit (GHS) - Optional</label>
-                        <Input
-                          {...register('initialDeposit', { valueAsNumber: true })}
-                          type="number"
-                          placeholder="e.g., 5000"
-                        />
-                      </div>
-
-                      {installmentCalculation && (
-                        <div className="p-4 rounded-xl bg-background border border-border">
-                          <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-                            <Info className="h-4 w-4 text-primary" />
-                            Payment Schedule Preview
-                          </p>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Total Price:</span>
-                              <span className="font-medium">GHS {installmentCalculation.totalPrice.toLocaleString()}</span>
-                            </div>
-                            {installmentCalculation.deposit > 0 && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Initial Deposit:</span>
-                                <span className="font-medium">GHS {installmentCalculation.deposit.toLocaleString()}</span>
-                              </div>
-                            )}
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Remaining Balance:</span>
-                              <span className="font-medium">GHS {installmentCalculation.remaining.toLocaleString()}</span>
-                            </div>
-                            <div className="border-t border-border pt-2 mt-2">
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Number of Payments:</span>
-                                <span className="font-medium">{installmentCalculation.numberOfPayments} {installmentCalculation.frequency.toLowerCase()} payments</span>
-                              </div>
-                              <div className="flex justify-between text-primary">
-                                <span className="font-medium">Each Payment:</span>
-                                <span className="font-bold">GHS {installmentCalculation.paymentAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                              </div>
-                            </div>
+                        <div className="border-t border-primary/20 pt-2 mt-2">
+                          <div className="flex justify-between text-primary">
+                            <span className="font-medium">Total Expected Revenue:</span>
+                            <span className="font-bold">GHS {(formValues.pricePerPlot * formValues.totalPlots).toLocaleString()}</span>
                           </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Step 5: Conditions */}
+              {/* Step 5: Payment Plans with Installment Packages */}
               {currentStep === 4 && (
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        {...register('allowOneTimePayment')}
+                        id="allowOneTimePayment"
+                        className="h-4 w-4 rounded border-input"
+                      />
+                      <label htmlFor="allowOneTimePayment" className="text-sm font-medium text-foreground">
+                        Allow One-Time Payment
+                      </label>
+                    </div>
+                    <p className="text-xs text-muted-foreground ml-7">
+                      Buyers can pay the full amount upfront (GHS {formValues.pricePerPlot?.toLocaleString() || 0} per plot)
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        {...register('allowInstallments')}
+                        id="allowInstallments"
+                        className="h-4 w-4 rounded border-input"
+                      />
+                      <label htmlFor="allowInstallments" className="text-sm font-medium text-foreground">
+                        Allow Installment Payments
+                      </label>
+                    </div>
+                  </div>
+
+                  {formValues.allowInstallments && (
+                    <div className="p-4 rounded-xl bg-muted/50 border border-border">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Installment Packages</p>
+                          <p className="text-xs text-muted-foreground">Create different payment plans with varying durations and interest rates</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={addInstallmentPackage}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add Package
+                        </Button>
+                      </div>
+
+                      <div className="space-y-4">
+                        {installmentPackages.map((pkg, index) => (
+                          <div key={pkg.id} className="p-4 rounded-lg bg-background border border-border">
+                            <div className="flex items-center justify-between mb-3">
+                              <p className="text-sm font-medium text-foreground">Package {index + 1}</p>
+                              {installmentPackages.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeInstallmentPackage(pkg.id)}
+                                  className="text-destructive hover:text-destructive/80"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="grid gap-4 sm:grid-cols-3">
+                              <div className="space-y-2">
+                                <label className="text-xs text-muted-foreground">Duration (months)</label>
+                                <Input
+                                  type="number"
+                                  value={pkg.durationMonths}
+                                  onChange={(e) => updateInstallmentPackage(pkg.id, 'durationMonths', parseInt(e.target.value) || 0)}
+                                  placeholder="e.g., 12"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs text-muted-foreground">Interest Rate (%)</label>
+                                <div className="relative">
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={pkg.interestRate}
+                                    onChange={(e) => updateInstallmentPackage(pkg.id, 'interestRate', parseFloat(e.target.value) || 0)}
+                                    placeholder="e.g., 5"
+                                    className="pr-8"
+                                  />
+                                  <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-xs text-muted-foreground">Initial Deposit (%)</label>
+                                <div className="relative">
+                                  <Input
+                                    type="number"
+                                    step="1"
+                                    value={pkg.initialDepositPercent}
+                                    onChange={(e) => updateInstallmentPackage(pkg.id, 'initialDepositPercent', parseFloat(e.target.value) || 0)}
+                                    placeholder="e.g., 20"
+                                    className="pr-8"
+                                  />
+                                  <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Package calculation preview */}
+                            {formValues.pricePerPlot && (
+                              <div className="mt-3 p-3 rounded-lg bg-muted/50 text-xs">
+                                <p className="font-medium text-foreground mb-2">Per Plot Breakdown:</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <span className="text-muted-foreground">Base price:</span>
+                                  <span>GHS {formValues.pricePerPlot.toLocaleString()}</span>
+                                  
+                                  <span className="text-muted-foreground">Interest ({pkg.interestRate}%):</span>
+                                  <span>GHS {((formValues.pricePerPlot * pkg.interestRate) / 100).toLocaleString()}</span>
+                                  
+                                  <span className="text-muted-foreground">Total per plot:</span>
+                                  <span className="font-medium">GHS {(formValues.pricePerPlot * (1 + pkg.interestRate / 100)).toLocaleString()}</span>
+                                  
+                                  <span className="text-muted-foreground">Initial deposit ({pkg.initialDepositPercent}%):</span>
+                                  <span className="font-medium text-primary">GHS {((formValues.pricePerPlot * pkg.initialDepositPercent) / 100).toLocaleString()}</span>
+                                  
+                                  <span className="text-muted-foreground">Monthly payment:</span>
+                                  <span className="font-medium text-primary">
+                                    GHS {(
+                                      ((formValues.pricePerPlot * (1 + pkg.interestRate / 100)) - (formValues.pricePerPlot * pkg.initialDepositPercent / 100)) / pkg.durationMonths
+                                    ).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Seller Financial Summary with all packages */}
+                  {formValues.pricePerPlot && formValues.totalPlots && formValues.allowInstallments && (
+                    <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
+                      <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                        <Calculator className="h-4 w-4" />
+                        Seller Revenue Summary (If All Plots Sold)
+                      </p>
+                      <div className="space-y-4">
+                        {sellerFinancials.packageFinancials.map((pkg, index) => (
+                          <div key={pkg.id} className="p-3 rounded-lg bg-background border border-border">
+                            <p className="text-xs font-medium text-foreground mb-2">
+                              {pkg.durationMonths} Month Plan ({pkg.interestRate}% interest)
+                            </p>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <span className="text-muted-foreground">Total initial deposits:</span>
+                              <span className="font-medium">GHS {pkg.totalInitialAllPlots.toLocaleString()}</span>
+                              
+                              <span className="text-muted-foreground">Monthly income:</span>
+                              <span className="font-medium">GHS {pkg.monthlyAllPlots.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                              
+                              <span className="text-muted-foreground">Total revenue:</span>
+                              <span className="font-medium text-primary">GHS {pkg.totalAllPlots.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 6: Conditions */}
+              {currentStep === 5 && (
                 <div className="space-y-6">
                   <div className="p-4 rounded-xl bg-muted/50 border border-border">
                     <p className="text-sm text-muted-foreground mb-4">
@@ -833,9 +994,6 @@ export default function NewListingPage() {
                       />
                       <span className="text-sm text-muted-foreground">% of total payment</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Site plan document will be released to buyer after this payment milestone
-                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -884,8 +1042,8 @@ export default function NewListingPage() {
                 </div>
               )}
 
-              {/* Step 6: Media */}
-              {currentStep === 5 && (
+              {/* Step 7: Media */}
+              {currentStep === 6 && (
                 <div className="space-y-6">
                   {/* Images */}
                   <div className="space-y-2">
@@ -976,8 +1134,8 @@ export default function NewListingPage() {
                 </div>
               )}
 
-              {/* Step 7: Review */}
-              {currentStep === 6 && (
+              {/* Step 8: Review */}
+              {currentStep === 7 && (
                 <div className="space-y-4">
                   <div className="rounded-xl border border-border divide-y divide-border">
                     <ReviewSection title="Basic Information">
@@ -992,40 +1150,39 @@ export default function NewListingPage() {
                       <ReviewItem label="Constituency" value={formValues.constituency} />
                       <ReviewItem label="District" value={formValues.district} />
                       {formValues.town && <ReviewItem label="Town" value={formValues.town} />}
-                    </ReviewSection>
-                    
-                    <ReviewSection title="Size & Pricing">
-                      <ReviewItem 
-                        label="Size" 
-                        value={`${formValues.totalSize} ${formValues.sizeUnit === 'PLOTS' ? 'plots' : 'acres'}`} 
-                      />
-                      {formValues.sizeUnit === 'PLOTS' && formValues.plotLength && formValues.plotWidth && (
-                        <ReviewItem 
-                          label="Plot Dimensions" 
-                          value={`${formValues.plotLength} x ${formValues.plotWidth} ${formValues.plotDimensionUnit?.toLowerCase()}`} 
-                        />
+                      {formValues.latitude && formValues.longitude && (
+                        <ReviewItem label="GPS" value={`${formValues.latitude.toFixed(6)}, ${formValues.longitude.toFixed(6)}`} />
                       )}
+                    </ReviewSection>
+                    
+                    <ReviewSection title="Plot Details">
                       <ReviewItem 
-                        label={`Price per ${formValues.sizeUnit === 'PLOTS' ? 'Plot' : 'Acre'}`} 
-                        value={`GHS ${formValues.pricePerUnit?.toLocaleString()}`} 
+                        label="Plot Size" 
+                        value={`${formValues.plotLength} × ${formValues.plotWidth} ${formValues.plotDimensionUnit?.toLowerCase()}`} 
+                      />
+                      <ReviewItem label="Total Plots" value={formValues.totalPlots?.toLocaleString()} />
+                      <ReviewItem 
+                        label="Price per Plot" 
+                        value={`GHS ${formValues.pricePerPlot?.toLocaleString()}`} 
                       />
                       <ReviewItem 
-                        label="Total Price" 
-                        value={`GHS ${((formValues.pricePerUnit || 0) * (formValues.totalSize || 0)).toLocaleString()}`} 
+                        label="Total Value" 
+                        value={`GHS ${((formValues.pricePerPlot || 0) * (formValues.totalPlots || 0)).toLocaleString()}`} 
                       />
                     </ReviewSection>
                     
-                    <ReviewSection title="Payment">
-                      <ReviewItem label="Payment Type" value={formValues.paymentType === 'ONE_TIME' ? 'One-Time Payment' : 'Installment Plan'} />
-                      {formValues.paymentType === 'INSTALLMENT' && installmentCalculation && (
-                        <>
-                          <ReviewItem label="Duration" value={`${formValues.installmentDurationMonths} months`} />
-                          <ReviewItem label="Frequency" value={installmentCalculation.frequency} />
-                          {installmentCalculation.deposit > 0 && (
-                            <ReviewItem label="Initial Deposit" value={`GHS ${installmentCalculation.deposit.toLocaleString()}`} />
-                          )}
-                          <ReviewItem label="Each Payment" value={`GHS ${installmentCalculation.paymentAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} />
-                        </>
+                    <ReviewSection title="Payment Options">
+                      <ReviewItem label="One-Time Payment" value={formValues.allowOneTimePayment ? 'Yes' : 'No'} />
+                      <ReviewItem label="Installments" value={formValues.allowInstallments ? 'Yes' : 'No'} />
+                      {formValues.allowInstallments && (
+                        <div className="mt-2">
+                          <p className="text-xs text-muted-foreground mb-2">Installment Packages:</p>
+                          {installmentPackages.map((pkg, i) => (
+                            <p key={pkg.id} className="text-xs text-foreground">
+                              • {pkg.durationMonths} months @ {pkg.interestRate}% interest, {pkg.initialDepositPercent}% deposit
+                            </p>
+                          ))}
+                        </div>
                       )}
                     </ReviewSection>
                     
