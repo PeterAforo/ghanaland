@@ -1,0 +1,303 @@
+{
+  "version": "1.0.0",
+  "project": "Ghana Lands Project",
+  "scope": {
+    "applies_to": ["apps/web"],
+    "motion_stack": ["gsap", "lenis"],
+    "optional": ["framer-motion"]
+  },
+  "enforcement": {
+    "mode": "strict",
+    "default_severity": "error",
+    "fail_on": ["error"],
+    "warn_on": ["warning"]
+  },
+  "principles": [
+    "Motion must explain state change or navigation, never decorate.",
+    "Prefer subtle motion: fade + translate <= 12px, scale between 0.98 and 1.",
+    "Reduce uncertainty: motion should clarify progress, confirmation, or hierarchy.",
+    "Respect accessibility: honor reduced-motion preferences."
+  ],
+  "files_and_locations": {
+    "allowed_motion_dirs": [
+      "apps/web/lib/motion/**",
+      "apps/web/motion/**"
+    ],
+    "forbidden_motion_dirs": [
+      "apps/web/app/**",
+      "apps/web/modules/**",
+      "apps/web/components/**"
+    ],
+    "rule": {
+      "id": "MOTION-LOC-001",
+      "severity": "error",
+      "type": "import_restrict",
+      "restricted_imports": [
+        "gsap",
+        "gsap/all",
+        "gsap/ScrollTrigger",
+        "lenis",
+        "@studio-freight/lenis"
+      ],
+      "allowed_paths": [
+        "apps/web/lib/motion/**",
+        "apps/web/motion/**"
+      ],
+      "message": "GSAP/Lenis imports must be confined to apps/web/lib/motion/** or apps/web/motion/**."
+    }
+  },
+  "tokens": {
+    "easing": {
+      "allowed": [
+        "power1.out",
+        "power2.out",
+        "power3.out",
+        "expo.out",
+        "sine.out"
+      ],
+      "default": "power2.out"
+    },
+    "duration_seconds": {
+      "min": 0.2,
+      "max": 0.6,
+      "default": 0.32
+    },
+    "translate_px": {
+      "max": 12,
+      "default": 8
+    },
+    "scale": {
+      "min": 0.98,
+      "max": 1.0,
+      "default": 1.0
+    },
+    "stagger_seconds": {
+      "min": 0.03,
+      "max": 0.08,
+      "default": 0.05
+    }
+  },
+  "accessibility": {
+    "reduced_motion_required": {
+      "id": "MOTION-A11Y-001",
+      "severity": "error",
+      "type": "regex_require_any",
+      "applies_to": ["apps/web/lib/motion/**/*.ts", "apps/web/motion/**/*.ts"],
+      "patterns": [
+        "prefers-reduced-motion",
+        "reducedMotion",
+        "matchMedia\\(",
+        "useReducedMotion"
+      ],
+      "message": "Motion utilities must respect prefers-reduced-motion (implement a reduced motion path)."
+    }
+  },
+  "allowed_motion_types": {
+    "entrance": {
+      "description": "Used when a view/section enters; subtle fade + translate only.",
+      "constraints": {
+        "opacity": { "from": 0, "to": 1 },
+        "translateY_max_px": 12,
+        "translateX_max_px": 12,
+        "scale_range": [0.98, 1.0],
+        "duration_range_seconds": [0.2, 0.6]
+      }
+    },
+    "state_change": {
+      "description": "Used to clarify UI state transitions (e.g., expand/collapse, selection).",
+      "constraints": {
+        "allowed_props": ["opacity", "height", "scale", "filter"],
+        "scale_range": [0.98, 1.0],
+        "duration_range_seconds": [0.2, 0.6]
+      }
+    },
+    "progress": {
+      "description": "Step transitions and in-flow progress updates; must be informative.",
+      "constraints": {
+        "duration_range_seconds": [0.2, 0.6],
+        "stagger_range_seconds": [0.03, 0.08]
+      }
+    },
+    "feedback": {
+      "description": "Confirmations and error feedback; short and crisp.",
+      "constraints": {
+        "duration_range_seconds": [0.2, 0.45],
+        "allowed_props": ["opacity", "scale"],
+        "scale_range": [0.98, 1.0]
+      }
+    }
+  },
+  "forbidden": {
+    "infinite_loops": {
+      "id": "MOTION-FORBID-001",
+      "severity": "error",
+      "type": "regex_forbid",
+      "applies_to": [
+        "apps/web/lib/motion/**/*.ts",
+        "apps/web/motion/**/*.ts",
+        "apps/web/components/**/*.tsx"
+      ],
+      "patterns": [
+        "repeat\\s*:\\s*-1",
+        "repeat\\(\\s*-1\\s*\\)",
+        "\\binfinite\\b"
+      ],
+      "exceptions": [
+        "apps/web/components/loaders/**",
+        "apps/web/components/**/Loader*.tsx"
+      ],
+      "message": "Infinite animations are forbidden outside loaders."
+    },
+    "decorative_parallax": {
+      "id": "MOTION-FORBID-002",
+      "severity": "warning",
+      "type": "regex_forbid",
+      "applies_to": ["apps/web/lib/motion/**/*.ts", "apps/web/motion/**/*.ts"],
+      "patterns": [
+        "parallax",
+        "ScrollTrigger\\.create",
+        "scrub\\s*:\\s*true"
+      ],
+      "message": "Decorative parallax/scroll-scrub motion is discouraged. Only implement if explicitly approved and documented."
+    },
+    "excessive_translate": {
+      "id": "MOTION-FORBID-003",
+      "severity": "error",
+      "type": "regex_numeric_max",
+      "applies_to": ["apps/web/lib/motion/**/*.ts", "apps/web/motion/**/*.ts"],
+      "pattern": "(x|y)\\s*:\\s*(-?\\d+)",
+      "max_abs": 12,
+      "message": "Translate distance exceeds 12px. Keep motion subtle."
+    },
+    "excessive_duration": {
+      "id": "MOTION-FORBID-004",
+      "severity": "warning",
+      "type": "regex_numeric_range",
+      "applies_to": ["apps/web/lib/motion/**/*.ts", "apps/web/motion/**/*.ts"],
+      "pattern": "duration\\s*:\\s*([0-9]*\\.?[0-9]+)",
+      "min": 0.2,
+      "max": 0.6,
+      "message": "Animation duration out of range. Keep durations between 0.2 and 0.6 seconds."
+    },
+    "unapproved_easing": {
+      "id": "MOTION-FORBID-005",
+      "severity": "warning",
+      "type": "regex_allowlist_on_capture",
+      "applies_to": ["apps/web/lib/motion/**/*.ts", "apps/web/motion/**/*.ts"],
+      "pattern": "ease\\s*:\\s*[\"']?([a-zA-Z0-9_.]+)[\"']?",
+      "allow_values": ["power1.out", "power2.out", "power3.out", "expo.out", "sine.out"],
+      "message": "Easing is not in the approved list. Use the standard easing tokens."
+    }
+  },
+  "gsap_usage": {
+    "timeline_preference": {
+      "id": "MOTION-GSAP-001",
+      "severity": "warning",
+      "type": "regex_require_any",
+      "applies_to": ["apps/web/lib/motion/**/*.ts", "apps/web/motion/**/*.ts"],
+      "patterns": [
+        "gsap\\.timeline\\(",
+        "timeline\\("
+      ],
+      "message": "Prefer gsap.timeline() for complex sequences to keep motion deterministic and reusable."
+    },
+    "no_direct_dom_queries_outside_hooks": {
+      "id": "MOTION-GSAP-002",
+      "severity": "warning",
+      "type": "regex_forbid",
+      "applies_to": ["apps/web/lib/motion/**/*.ts", "apps/web/motion/**/*.ts"],
+      "patterns": [
+        "document\\.querySelector",
+        "document\\.getElementById",
+        "window\\."
+      ],
+      "message": "Avoid direct DOM queries in motion utilities; prefer refs passed from components."
+    }
+  },
+  "lenis_usage": {
+    "single_instance": {
+      "id": "MOTION-LENIS-001",
+      "severity": "error",
+      "type": "regex_forbid",
+      "applies_to": ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
+      "patterns": [
+        "new\\s+Lenis\\("
+      ],
+      "exceptions": [
+        "apps/web/lib/motion/lenis.ts",
+        "apps/web/motion/lenis.ts"
+      ],
+      "message": "Lenis must be instantiated in a single location (lenis.ts) and reused across the app."
+    }
+  },
+  "patterns": {
+    "approved_utilities": [
+      {
+        "name": "fadeInUp",
+        "type": "entrance",
+        "defaults": {
+          "opacityFrom": 0,
+          "yFrom": 8,
+          "duration": 0.32,
+          "ease": "power2.out"
+        }
+      },
+      {
+        "name": "fadeIn",
+        "type": "entrance",
+        "defaults": {
+          "opacityFrom": 0,
+          "duration": 0.28,
+          "ease": "power2.out"
+        }
+      },
+      {
+        "name": "scaleIn",
+        "type": "entrance",
+        "defaults": {
+          "scaleFrom": 0.98,
+          "duration": 0.28,
+          "ease": "power2.out"
+        }
+      },
+      {
+        "name": "stepTransition",
+        "type": "progress",
+        "defaults": {
+          "duration": 0.32,
+          "ease": "power2.out"
+        }
+      },
+      {
+        "name": "successPop",
+        "type": "feedback",
+        "defaults": {
+          "scaleFrom": 0.98,
+          "duration": 0.24,
+          "ease": "sine.out"
+        }
+      }
+    ]
+  },
+  "documentation": {
+    "decision_log_required": {
+      "id": "MOTION-DOC-001",
+      "severity": "error",
+      "type": "regex_require_any",
+      "applies_to": ["motion.rules.json"],
+      "patterns": ["version", "principles", "forbidden", "patterns"],
+      "message": "motion.rules.json must maintain versioned constraints and approved patterns."
+    }
+  },
+  "definition_of_done": {
+    "checklist": [
+      "All GSAP/Lenis usage lives in apps/web/lib/motion/** (or apps/web/motion/**).",
+      "Reduced-motion path implemented and tested.",
+      "Durations are within 0.2s–0.6s unless explicitly approved.",
+      "Translate distances do not exceed 12px.",
+      "No infinite loops outside loader components.",
+      "No decorative parallax/scroll-scrub without an approved decision record.",
+      "Utilities are reused (no page-level animation logic)."
+    ]
+  }
+}

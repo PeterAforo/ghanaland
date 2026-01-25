@@ -1,0 +1,334 @@
+{
+  "version": "1.0.0",
+  "project": "Ghana Lands Project",
+  "tooling": {
+    "intended_consumer": "windsurf",
+    "enforcement_mode": "strict",
+    "default_severity": "error"
+  },
+  "sources_of_truth": {
+    "required_files": [
+      "design-system.md",
+      "ui.rules.json",
+      "motion.rules.json",
+      "ux.flows.md",
+      "ARCHITECTURE.md",
+      "api.conventions.md",
+      "naming.rules.md",
+      "folder-structure.md"
+    ],
+    "rule": {
+      "id": "SSOT-001",
+      "title": "Single Source of Truth",
+      "severity": "error",
+      "logic": {
+        "type": "presence",
+        "files_must_exist": [
+          "design-system.md",
+          "ui.rules.json",
+          "motion.rules.json",
+          "ux.flows.md",
+          "ARCHITECTURE.md",
+          "api.conventions.md",
+          "naming.rules.md",
+          "folder-structure.md"
+        ]
+      },
+      "message": "Required governance files are missing. Add them before implementing new features."
+    }
+  },
+  "ui": {
+    "design_tokens": {
+      "id": "UI-TOKENS-001",
+      "title": "No raw hex colors in UI source",
+      "severity": "error",
+      "applies_to": ["apps/web/**/*.tsx", "apps/web/**/*.ts", "apps/web/**/*.css"],
+      "logic": {
+        "type": "regex_forbid",
+        "patterns": ["#[0-9a-fA-F]{3,8}\\b", "rgb\\(", "rgba\\(", "hsl\\(", "hsla\\("],
+        "exceptions": ["apps/web/**/tailwind.config.*", "apps/web/**/globals.css"]
+      },
+      "message": "Use color tokens only. Do not use raw hex/rgb/hsl in components."
+    },
+    "typography": {
+      "id": "UI-TYPE-001",
+      "title": "Disallow inline styles for typography",
+      "severity": "error",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "logic": {
+        "type": "regex_forbid",
+        "patterns": [
+          "style=\\{\\{[^}]*font(Size|Weight|Family|Style|Variant)[^}]*\\}\\}",
+          "style=\\{\\{[^}]*lineHeight[^}]*\\}\\}",
+          "style=\\{\\{[^}]*letterSpacing[^}]*\\}\\}"
+        ]
+      },
+      "message": "Typography must be expressed via class tokens (Tailwind) or design-system components only."
+    },
+    "component_reuse": {
+      "id": "UI-COMP-001",
+      "title": "No one-off UI components outside approved locations",
+      "severity": "error",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "logic": {
+        "type": "path_allowlist",
+        "allow": ["apps/web/components/**", "apps/web/app/**", "apps/web/modules/**"],
+        "deny": ["apps/web/app/**/components/**", "apps/web/app/**/ui/**", "apps/web/app/**/atoms/**"]
+      },
+      "message": "UI components must live in shared component/module directories. Do not create page-local component libraries."
+    },
+    "button_variants": {
+      "id": "UI-BTN-001",
+      "title": "Button variants restricted to the design system",
+      "severity": "error",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "logic": {
+        "type": "regex_allowlist_on_capture",
+        "pattern": "<Button[^>]*variant=\\{?\"?([a-zA-Z-]+)\"?\\}?",
+        "allow_values": ["primary", "secondary", "ghost", "destructive"]
+      },
+      "message": "Button variant is not allowed. Use: primary | secondary | ghost | destructive."
+    },
+    "dark_mode": {
+      "id": "UI-DARK-001",
+      "title": "Dark mode classes required for surface/text/border on shared components",
+      "severity": "warning",
+      "applies_to": ["apps/web/components/**/*.tsx"],
+      "logic": {
+        "type": "regex_require_all",
+        "patterns": ["dark:", "text-", "bg-", "border-"]
+      },
+      "message": "Shared components should include dark mode support and define bg/text/border tokens."
+    },
+    "states_required": {
+      "id": "UI-STATE-001",
+      "title": "Pages must handle loading/empty/error/success states",
+      "severity": "error",
+      "applies_to": ["apps/web/app/**/page.tsx", "apps/web/modules/**/pages/**/*.tsx"],
+      "logic": {
+        "type": "heuristic_presence",
+        "must_include_any": ["Loading", "isLoading", "Skeleton", "EmptyState", "isError", "ErrorState", "toast", "success"],
+        "min_matches": 2
+      },
+      "message": "Page lacks explicit UI state handling (loading/empty/error/success). Add required states."
+    },
+    "primary_action_limit": {
+      "id": "UX-ACTION-001",
+      "title": "One primary action per view",
+      "severity": "warning",
+      "applies_to": ["apps/web/app/**/page.tsx", "apps/web/modules/**/pages/**/*.tsx"],
+      "logic": {
+        "type": "count_regex_max",
+        "pattern": "variant=\\{?\"?primary\"?\\}?",
+        "max": 1
+      },
+      "message": "More than one primary action detected on a single view. Reduce to a single primary CTA."
+    }
+  },
+  "motion": {
+    "gsap_scope": {
+      "id": "MOTION-001",
+      "title": "GSAP usage restricted to motion utilities",
+      "severity": "error",
+      "applies_to": ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
+      "logic": {
+        "type": "import_restrict",
+        "restricted_imports": ["gsap", "gsap/all", "gsap/ScrollTrigger"],
+        "allowed_paths": ["apps/web/lib/motion/**", "apps/web/motion/**"]
+      },
+      "message": "Import GSAP only in apps/web/lib/motion/** (or apps/web/motion/**)."
+    },
+    "duration_limits": {
+      "id": "MOTION-002",
+      "title": "Animation durations must be within 0.2s–0.6s",
+      "severity": "warning",
+      "applies_to": ["apps/web/lib/motion/**/*.ts", "apps/web/motion/**/*.ts"],
+      "logic": {
+        "type": "regex_numeric_range",
+        "pattern": "duration\\s*:\\s*([0-9]*\\.?[0-9]+)",
+        "min": 0.2,
+        "max": 0.6
+      },
+      "message": "Animation duration is out of range. Keep durations between 0.2 and 0.6 seconds."
+    },
+    "forbid_infinite": {
+      "id": "MOTION-003",
+      "title": "Forbid infinite loops except loaders",
+      "severity": "error",
+      "applies_to": ["apps/web/lib/motion/**/*.ts", "apps/web/motion/**/*.ts", "apps/web/components/**/*.tsx"],
+      "logic": {
+        "type": "regex_forbid",
+        "patterns": ["repeat\\s*:\\s*-1", "infinite", "yoyo\\s*:\\s*true"],
+        "exceptions": ["apps/web/components/loaders/**", "apps/web/components/**/Loader*.tsx"]
+      },
+      "message": "Infinite animations are forbidden outside loaders."
+    }
+  },
+  "ux": {
+    "flow_pattern_consistency": {
+      "id": "UX-FLOW-001",
+      "title": "Creation flows must use one approved pattern (stepper/wizard/review-confirm-submit)",
+      "severity": "error",
+      "applies_to": ["apps/web/modules/**/flows/**", "apps/web/app/**/create/**", "apps/web/app/**/new/**"],
+      "logic": {
+        "type": "regex_require_any",
+        "patterns": ["Stepper", "Wizard", "Review", "Confirm", "Submit"]
+      },
+      "message": "Creation flow does not appear to follow an approved pattern. Use Stepper/Wizard/Review→Confirm→Submit."
+    },
+    "destructive_confirmation": {
+      "id": "UX-DEST-001",
+      "title": "Destructive actions must require confirmation",
+      "severity": "error",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "logic": {
+        "type": "paired_presence",
+        "trigger_patterns": ["destructive", "Delete", "Remove", "Reject", "Revoke"],
+        "required_nearby_patterns": ["Confirm", "Are you sure", "confirm", "AlertDialog"],
+        "window_lines": 80
+      },
+      "message": "Destructive action detected without a confirmation affordance (AlertDialog/Confirm copy)."
+    }
+  },
+  "api": {
+    "response_shape": {
+      "id": "API-RESP-001",
+      "title": "API responses must follow {success,data,meta,error}",
+      "severity": "error",
+      "applies_to": ["apps/api/src/**/*.ts"],
+      "logic": {
+        "type": "regex_require_all",
+        "patterns": ["success\\s*:", "data\\s*:", "meta\\s*:", "error\\s*:"]
+      },
+      "message": "API response does not match the required envelope { success, data, meta, error }."
+    },
+    "swagger_required": {
+      "id": "API-DOC-001",
+      "title": "Swagger/OpenAPI must be enabled",
+      "severity": "error",
+      "applies_to": ["apps/api/src/main.ts"],
+      "logic": {
+        "type": "regex_require_all",
+        "patterns": ["SwaggerModule", "DocumentBuilder"]
+      },
+      "message": "Swagger/OpenAPI is not configured. Enable SwaggerModule with DocumentBuilder in main.ts."
+    },
+    "rbac_enforced": {
+      "id": "API-RBAC-001",
+      "title": "Protected controllers must enforce auth + permission guards",
+      "severity": "warning",
+      "applies_to": ["apps/api/src/modules/**/controllers/**/*.ts", "apps/api/src/modules/**/**.controller.ts"],
+      "logic": {
+        "type": "regex_require_any",
+        "patterns": ["UseGuards", "AuthGuard", "PermissionGuard", "RolesGuard"]
+      },
+      "message": "Controller may be missing guard enforcement. Apply UseGuards(AuthGuard, PermissionGuard/RolesGuard) as appropriate."
+    }
+  },
+  "queue": {
+    "idempotency_keys": {
+      "id": "QUEUE-001",
+      "title": "Payment/notification jobs must include idempotency keys",
+      "severity": "warning",
+      "applies_to": ["apps/api/src/**/*.ts", "apps/workers/src/**/*.ts"],
+      "logic": {
+        "type": "paired_presence",
+        "trigger_patterns": ["notifications.send_sms", "notifications.send_email", "payment", "hubtel"],
+        "required_nearby_patterns": ["idempotency", "dedupe", "jobId", "requestId"],
+        "window_lines": 120
+      },
+      "message": "Queue producer/consumer for payments or notifications should include an idempotency/deduplication key."
+    },
+    "retry_backoff": {
+      "id": "QUEUE-002",
+      "title": "Jobs must define retry/backoff policy",
+      "severity": "warning",
+      "applies_to": ["apps/api/src/**/*.ts", "apps/workers/src/**/*.ts"],
+      "logic": {
+        "type": "regex_require_any",
+        "patterns": ["attempts\\s*:", "backoff\\s*:"]
+      },
+      "message": "Queue jobs should define attempts and backoff for reliability."
+    }
+  },
+  "naming": {
+    "kebab_case_files": {
+      "id": "NAME-001",
+      "title": "kebab-case for filenames (web)",
+      "severity": "warning",
+      "applies_to": ["apps/web/**/*.*"],
+      "logic": {
+        "type": "filename_case",
+        "case": "kebab",
+        "exceptions": [
+          "apps/web/app/**/page.tsx",
+          "apps/web/app/**/layout.tsx",
+          "apps/web/app/**/loading.tsx",
+          "apps/web/app/**/error.tsx",
+          "apps/web/app/**/not-found.tsx"
+        ]
+      },
+      "message": "Use kebab-case filenames in apps/web (Next.js route files excepted)."
+    },
+    "no_temp_names": {
+      "id": "NAME-002",
+      "title": "Forbid temporary component names",
+      "severity": "error",
+      "applies_to": ["apps/web/**/*.tsx", "apps/api/src/**/*.ts"],
+      "logic": {
+        "type": "regex_forbid",
+        "patterns": [
+          "\\bCard2\\b",
+          "\\bNewModal\\b",
+          "\\bTemp(Form|Modal|Component|Service)\\b",
+          "\\bTest(Form|Modal|Component|Service)\\b"
+        ]
+      },
+      "message": "Temporary names are forbidden. Use semantic names (e.g., ListingSummaryCard, VerificationRejectModal)."
+    }
+  },
+  "process": {
+    "no_shortcuts": {
+      "id": "PROC-001",
+      "title": "No hardcoding to bypass core logic (RBAC/state/payment)",
+      "severity": "error",
+      "applies_to": ["apps/web/**/*.ts", "apps/web/**/*.tsx", "apps/api/src/**/*.ts"],
+      "logic": {
+        "type": "regex_forbid",
+        "patterns": [
+          "\\bTODO:\\s*remove\\b",
+          "\\bHACK\\b",
+          "\\bTEMP\\b",
+          "bypassRbac\\(",
+          "skipAuth\\(",
+          "mockPayment\\(",
+          "forceAllow\\("
+        ]
+      },
+      "message": "Shortcuts that bypass core logic are forbidden. Scaffold proper backend state/guards instead."
+    },
+    "approval_gate_for_new_patterns": {
+      "id": "PROC-002",
+      "title": "New patterns require explicit approval record",
+      "severity": "error",
+      "applies_to": ["design-system.md", "ux.flows.md", "motion.rules.json", "ui.rules.json"],
+      "logic": {
+        "type": "regex_require_any",
+        "patterns": ["## Change Log", "## Decisions", "## ADR"]
+      },
+      "message": "Governance docs must include a Decisions/Change Log/ADR section for approvals."
+    }
+  },
+  "definition_of_done": {
+    "checklist": [
+      "UI uses design tokens (no raw colors, no one-off components).",
+      "Approved UX flow pattern used (stepper/wizard/review-confirm-submit).",
+      "Loading/empty/error/success states implemented.",
+      "RBAC enforced on API endpoints and reflected in UI routing/visibility.",
+      "Audit events logged for admin + financial actions.",
+      "Responsive behavior validated.",
+      "Dark mode verified for bg/text/border/hover/disabled states.",
+      "Search indexing job wired for listing create/update/delete."
+    ]
+  }
+}

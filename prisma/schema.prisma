@@ -1,0 +1,450 @@
+// Ghana Lands Project - Prisma Schema
+// Version: 1.0.0
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+// ============================================================================
+// TENANCY & USERS
+// ============================================================================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organizations Organization[]
+  users         User[]
+  listings      Listing[]
+  auditLogs     AuditLog[]
+
+  @@map("tenants")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users  User[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String        @id @default(cuid())
+  tenantId       String        @map("tenant_id")
+  organizationId String?       @map("organization_id")
+  email          String        @unique
+  phone          String?       @unique
+  passwordHash   String        @map("password_hash")
+  fullName       String        @map("full_name")
+  avatarUrl      String?       @map("avatar_url")
+  accountStatus  AccountStatus @default(ACTIVE) @map("account_status")
+  emailVerified  Boolean       @default(false) @map("email_verified")
+  phoneVerified  Boolean       @default(false) @map("phone_verified")
+  twoFactorEnabled Boolean     @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String?     @map("two_factor_secret")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  userRoles    UserRole[]
+  refreshTokens RefreshToken[]
+  listings     Listing[]     @relation("SellerListings")
+  buyerTransactions Transaction[] @relation("BuyerTransactions")
+  sellerTransactions Transaction[] @relation("SellerTransactions")
+  verificationRequests VerificationRequest[]
+  documents    Document[]
+  auditLogs    AuditLog[]    @relation("ActorAuditLogs")
+
+  @@index([tenantId])
+  @@index([email])
+  @@index([phone])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+  PENDING_VERIFICATION
+}
+
+// ============================================================================
+// RBAC (Role-Based Access Control)
+// ============================================================================
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  resource    String
+  action      String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rolePermissions RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId String @map("user_id")
+  roleId String @map("role_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// ============================================================================
+// LISTINGS
+// ============================================================================
+
+model Listing {
+  id                String            @id @default(cuid())
+  tenantId          String            @map("tenant_id")
+  sellerId          String            @map("seller_id")
+  title             String
+  description       String?
+  category          LandCategory
+  landType          LandType          @map("land_type")
+  tenureType        TenureType        @map("tenure_type")
+  leasePeriodYears  Int?              @map("lease_period_years")
+  sizeAcres         Decimal           @map("size_acres") @db.Decimal(10, 4)
+  priceGhs          Decimal           @map("price_ghs") @db.Decimal(15, 2)
+  currency          String            @default("GHS")
+  region            String
+  district          String
+  town              String?
+  address           String?
+  latitude          Float?
+  longitude         Float?
+  geometry          Unsupported("geometry(MultiPolygon, 4326)")?
+  bbox              Unsupported("geometry(Polygon, 4326)")?
+  listingStatus     ListingStatus     @default(DRAFT) @map("listing_status")
+  verificationStatus VerificationStatus @default(UNVERIFIED) @map("verification_status")
+  verifiedAt        DateTime?         @map("verified_at")
+  isFeatured        Boolean           @default(false) @map("is_featured")
+  viewCount         Int               @default(0) @map("view_count")
+  publishedAt       DateTime?         @map("published_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  seller       User          @relation("SellerListings", fields: [sellerId], references: [id])
+  media        ListingMedia[]
+  transactions Transaction[]
+  verificationRequests VerificationRequest[]
+  documents    Document[]
+
+  @@index([tenantId])
+  @@index([sellerId])
+  @@index([listingStatus])
+  @@index([verificationStatus])
+  @@index([region, district])
+  @@index([category])
+  @@index([priceGhs])
+  @@map("listings")
+}
+
+model ListingMedia {
+  id        String    @id @default(cuid())
+  listingId String    @map("listing_id")
+  url       String
+  type      MediaType
+  order     Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_media")
+}
+
+enum LandCategory {
+  RESIDENTIAL
+  COMMERCIAL
+  INDUSTRIAL
+  AGRICULTURAL
+  MIXED_USE
+}
+
+enum LandType {
+  CUSTOMARY
+  TITLED
+  LEASEHOLD
+  FREEHOLD
+  GOVERNMENT
+}
+
+enum TenureType {
+  FREEHOLD
+  LEASEHOLD
+  CUSTOMARY
+}
+
+enum ListingStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  PUBLISHED
+  SUSPENDED
+  REJECTED
+  SOLD
+  ARCHIVED
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  IN_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+// ============================================================================
+// VERIFICATION
+// ============================================================================
+
+model VerificationRequest {
+  id            String                    @id @default(cuid())
+  listingId     String                    @map("listing_id")
+  requesterId   String                    @map("requester_id")
+  status        VerificationRequestStatus @default(PENDING)
+  notes         String?
+  rejectionReason String?                 @map("rejection_reason")
+  verifiedBy    String?                   @map("verified_by")
+  verifiedAt    DateTime?                 @map("verified_at")
+  createdAt     DateTime                  @default(now()) @map("created_at")
+  updatedAt     DateTime                  @updatedAt @map("updated_at")
+
+  listing   Listing    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  requester User       @relation(fields: [requesterId], references: [id])
+  documents Document[]
+
+  @@index([listingId])
+  @@index([status])
+  @@map("verification_requests")
+}
+
+enum VerificationRequestStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// ============================================================================
+// TRANSACTIONS & PAYMENTS
+// ============================================================================
+
+model Transaction {
+  id              String            @id @default(cuid())
+  listingId       String            @map("listing_id")
+  buyerId         String            @map("buyer_id")
+  sellerId        String            @map("seller_id")
+  agreedPriceGhs  Decimal           @map("agreed_price_ghs") @db.Decimal(15, 2)
+  platformFeeGhs  Decimal           @map("platform_fee_ghs") @db.Decimal(15, 2)
+  sellerNetGhs    Decimal           @map("seller_net_ghs") @db.Decimal(15, 2)
+  status          TransactionStatus @default(CREATED)
+  escrowStatus    EscrowStatus?     @map("escrow_status")
+  completedAt     DateTime?         @map("completed_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  listing  Listing   @relation(fields: [listingId], references: [id])
+  buyer    User      @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  seller   User      @relation("SellerTransactions", fields: [sellerId], references: [id])
+  payments Payment[]
+
+  @@index([listingId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+  @@map("transactions")
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  transactionId   String        @map("transaction_id")
+  amountGhs       Decimal       @map("amount_ghs") @db.Decimal(15, 2)
+  type            PaymentType
+  status          PaymentStatus @default(INITIATED)
+  provider        String        @default("hubtel")
+  providerRef     String?       @map("provider_ref")
+  idempotencyKey  String        @unique @map("idempotency_key")
+  metadata        Json?
+  paidAt          DateTime?     @map("paid_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@index([status])
+  @@index([idempotencyKey])
+  @@map("payments")
+}
+
+enum TransactionStatus {
+  CREATED
+  ESCROW_FUNDED
+  VERIFICATION_PERIOD
+  DISPUTED
+  READY_TO_RELEASE
+  RELEASED
+  REFUNDED
+  CANCELLED
+  COMPLETED
+}
+
+enum EscrowStatus {
+  PENDING
+  FUNDED
+  RELEASED
+  REFUNDED
+}
+
+enum PaymentType {
+  ESCROW_DEPOSIT
+  INSTALLMENT
+  PLATFORM_FEE
+  REFUND
+}
+
+enum PaymentStatus {
+  INITIATED
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+// ============================================================================
+// DOCUMENTS
+// ============================================================================
+
+model Document {
+  id                    String       @id @default(cuid())
+  uploaderId            String       @map("uploader_id")
+  listingId             String?      @map("listing_id")
+  verificationRequestId String?      @map("verification_request_id")
+  name                  String
+  mimeType              String       @map("mime_type")
+  sizeBytes             Int          @map("size_bytes")
+  storageKey            String       @map("storage_key")
+  documentType          DocumentType @map("document_type")
+  createdAt             DateTime     @default(now()) @map("created_at")
+
+  uploader            User                 @relation(fields: [uploaderId], references: [id])
+  listing             Listing?             @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  verificationRequest VerificationRequest? @relation(fields: [verificationRequestId], references: [id], onDelete: Cascade)
+
+  @@index([uploaderId])
+  @@index([listingId])
+  @@index([verificationRequestId])
+  @@map("documents")
+}
+
+enum DocumentType {
+  SITE_PLAN
+  TITLE_DEED
+  INDENTURE
+  SURVEY_REPORT
+  ID_DOCUMENT
+  PROOF_OF_OWNERSHIP
+  OTHER
+}
+
+// ============================================================================
+// AUDIT LOGS
+// ============================================================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  metadata    Json?
+  requestId   String?  @map("request_id")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation("ActorAuditLogs", fields: [actorUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

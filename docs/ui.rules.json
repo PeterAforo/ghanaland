@@ -1,0 +1,254 @@
+{
+  "version": "1.0.0",
+  "project": "Ghana Lands Project",
+  "scope": {
+    "applies_to": ["apps/web"],
+    "framework": "nextjs_app_router",
+    "ui_stack": ["tailwindcss", "shadcn_ui", "lucide_react"]
+  },
+  "enforcement": {
+    "mode": "strict",
+    "default_severity": "error",
+    "report_format": "compact",
+    "fail_on": ["error"],
+    "warn_on": ["warning"]
+  },
+  "sources_of_truth": {
+    "required_docs": [
+      "design-system.md",
+      "motion.rules.json",
+      "ux.flows.md"
+    ],
+    "rule": {
+      "id": "UI-SSOT-001",
+      "severity": "error",
+      "type": "presence",
+      "files_must_exist": ["design-system.md", "motion.rules.json", "ux.flows.md"],
+      "message": "Missing required UI governance files. Ensure design-system.md, motion.rules.json, and ux.flows.md exist."
+    }
+  },
+  "naming": {
+    "component_naming": {
+      "id": "UI-NAME-001",
+      "severity": "error",
+      "type": "regex_forbid",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "patterns": [
+        "\\bCard2\\b",
+        "\\bNewModal\\b",
+        "\\bTemp(Form|Modal|Component|Widget|View)\\b",
+        "\\bTest(Form|Modal|Component|Widget|View)\\b"
+      ],
+      "message": "Temporary component names are forbidden. Use semantic names (e.g., ListingSummaryCard)."
+    },
+    "file_naming": {
+      "id": "UI-NAME-002",
+      "severity": "warning",
+      "type": "filename_case",
+      "applies_to": ["apps/web/**/*.*"],
+      "case": "kebab",
+      "exceptions": [
+        "apps/web/app/**/page.tsx",
+        "apps/web/app/**/layout.tsx",
+        "apps/web/app/**/loading.tsx",
+        "apps/web/app/**/error.tsx",
+        "apps/web/app/**/not-found.tsx"
+      ],
+      "message": "Use kebab-case for filenames in apps/web (Next.js route files excepted)."
+    }
+  },
+  "tokens": {
+    "no_raw_colors": {
+      "id": "UI-TOKEN-001",
+      "severity": "error",
+      "type": "regex_forbid",
+      "applies_to": ["apps/web/**/*.tsx", "apps/web/**/*.ts", "apps/web/**/*.css"],
+      "patterns": [
+        "#[0-9a-fA-F]{3,8}\\b",
+        "rgb\\(",
+        "rgba\\(",
+        "hsl\\(",
+        "hsla\\("
+      ],
+      "exceptions": ["apps/web/**/tailwind.config.*", "apps/web/**/globals.css"],
+      "message": "Do not use raw colors in UI code. Use semantic tokens / Tailwind theme tokens."
+    },
+    "no_inline_style_colors": {
+      "id": "UI-TOKEN-002",
+      "severity": "error",
+      "type": "regex_forbid",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "patterns": [
+        "style=\\{\\{[^}]*color\\s*:",
+        "style=\\{\\{[^}]*background(Color)?\\s*:",
+        "style=\\{\\{[^}]*border(Color)?\\s*:"
+      ],
+      "message": "Inline styles for colors are forbidden. Use class tokens only."
+    }
+  },
+  "typography": {
+    "no_inline_typography": {
+      "id": "UI-TYPE-001",
+      "severity": "error",
+      "type": "regex_forbid",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "patterns": [
+        "style=\\{\\{[^}]*font(Size|Weight|Family|Style|Variant)[^}]*\\}\\}",
+        "style=\\{\\{[^}]*lineHeight[^}]*\\}\\}",
+        "style=\\{\\{[^}]*letterSpacing[^}]*\\}\\}"
+      ],
+      "message": "Inline typography is forbidden. Use approved Tailwind type scale and design-system components."
+    },
+    "allowed_text_scale": {
+      "id": "UI-TYPE-002",
+      "severity": "warning",
+      "type": "regex_allowlist_any",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "any_of_patterns": [
+        "text-xs",
+        "text-sm",
+        "text-base",
+        "text-lg",
+        "text-xl",
+        "text-2xl"
+      ],
+      "message": "Use the approved type scale tokens (text-xs/sm/base/lg/xl/2xl). Avoid arbitrary size utilities."
+    }
+  },
+  "layout": {
+    "no_page_local_ui_libraries": {
+      "id": "UI-LAYOUT-001",
+      "severity": "error",
+      "type": "path_denylist",
+      "applies_to": ["apps/web/**/*"],
+      "deny": [
+        "apps/web/app/**/components/**",
+        "apps/web/app/**/ui/**",
+        "apps/web/app/**/atoms/**",
+        "apps/web/app/**/molecules/**"
+      ],
+      "message": "Do not create page-local UI libraries. Use apps/web/components or apps/web/modules for shared UI."
+    },
+    "shared_component_locations": {
+      "id": "UI-LAYOUT-002",
+      "severity": "warning",
+      "type": "path_allowlist",
+      "applies_to": ["apps/web/components/**/*.tsx"],
+      "allow": ["apps/web/components/**"],
+      "message": "Shared components should be placed under apps/web/components/**."
+    }
+  },
+  "components": {
+    "button_variants": {
+      "id": "UI-COMP-001",
+      "severity": "error",
+      "type": "regex_allowlist_on_capture",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "pattern": "<Button[^>]*variant=\\{?\"?([a-zA-Z-]+)\"?\\}?",
+      "allow_values": ["primary", "secondary", "ghost", "destructive"],
+      "message": "Invalid Button variant. Allowed: primary | secondary | ghost | destructive."
+    },
+    "one_primary_cta_per_view": {
+      "id": "UI-COMP-002",
+      "severity": "warning",
+      "type": "count_regex_max",
+      "applies_to": ["apps/web/app/**/page.tsx", "apps/web/modules/**/pages/**/*.tsx"],
+      "pattern": "variant=\\{?\"?primary\"?\\}?",
+      "max": 1,
+      "message": "More than one primary CTA detected. Reduce to a single primary action per view."
+    },
+    "destructive_requires_confirmation": {
+      "id": "UI-COMP-003",
+      "severity": "error",
+      "type": "paired_presence",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "trigger_patterns": ["variant=\\{?\"?destructive\"?\\}?", "\\bDelete\\b", "\\bRemove\\b", "\\bReject\\b", "\\bRevoke\\b"],
+      "required_nearby_patterns": ["AlertDialog", "Confirm", "Are you sure", "confirm"],
+      "window_lines": 120,
+      "message": "Destructive action detected without confirmation UI. Use AlertDialog/Confirm pattern."
+    },
+    "badge_required_for_status": {
+      "id": "UI-COMP-004",
+      "severity": "warning",
+      "type": "paired_presence",
+      "applies_to": ["apps/web/modules/**/*.tsx", "apps/web/app/**/*.tsx"],
+      "trigger_patterns": ["status", "verification", "verified", "pending", "rejected"],
+      "required_nearby_patterns": ["Badge", "VerificationSealBadge"],
+      "window_lines": 160,
+      "message": "Status/verification UI should use Badge (or VerificationSealBadge) for consistency."
+    }
+  },
+  "states": {
+    "page_states_required": {
+      "id": "UI-STATE-001",
+      "severity": "error",
+      "type": "heuristic_presence",
+      "applies_to": ["apps/web/app/**/page.tsx", "apps/web/modules/**/pages/**/*.tsx"],
+      "must_include_any": ["isLoading", "Loading", "Skeleton", "EmptyState", "isError", "ErrorState", "error", "toast", "success"],
+      "min_matches": 2,
+      "message": "Page must define loading/empty/error/success states (at least two indicators detected)."
+    },
+    "no_blank_screens": {
+      "id": "UI-STATE-002",
+      "severity": "warning",
+      "type": "regex_forbid",
+      "applies_to": ["apps/web/app/**/page.tsx", "apps/web/modules/**/pages/**/*.tsx"],
+      "patterns": ["return\\s+null\\s*;", "return\\s+<>\\s*</>\\s*;"],
+      "message": "Avoid blank screens. Provide meaningful loading/empty/error UI."
+    }
+  },
+  "dark_mode": {
+    "shared_components_must_support_dark": {
+      "id": "UI-DARK-001",
+      "severity": "warning",
+      "type": "regex_require_all",
+      "applies_to": ["apps/web/components/**/*.tsx"],
+      "patterns": ["dark:", "bg-", "text-", "border-"],
+      "message": "Shared components should include dark mode styling and define bg/text/border tokens."
+    }
+  },
+  "accessibility": {
+    "icon_buttons_need_aria": {
+      "id": "UI-A11Y-001",
+      "severity": "warning",
+      "type": "paired_presence",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "trigger_patterns": ["<Button[^>]*>\\s*<.*Icon", "<button[^>]*>\\s*<.*Icon"],
+      "required_nearby_patterns": ["aria-label", "sr-only"],
+      "window_lines": 40,
+      "message": "Icon-only buttons must include aria-label or sr-only text."
+    }
+  },
+  "data_contract": {
+    "no_direct_fetch_in_components": {
+      "id": "UI-DATA-001",
+      "severity": "warning",
+      "type": "regex_forbid",
+      "applies_to": ["apps/web/**/*.tsx"],
+      "patterns": ["\\bfetch\\(", "\\baxios\\."],
+      "exceptions": ["apps/web/lib/api/**", "apps/web/services/**"],
+      "message": "Do not call fetch/axios directly in components. Use the API client layer + TanStack Query hooks."
+    }
+  },
+  "change_control": {
+    "new_patterns_require_doc_update": {
+      "id": "UI-CHANGE-001",
+      "severity": "error",
+      "type": "regex_require_any",
+      "applies_to": ["design-system.md"],
+      "patterns": ["## Change Log", "## Decisions", "## ADR"],
+      "message": "design-system.md must include a Decisions/ADR or Change Log section for approvals."
+    }
+  },
+  "definition_of_done": {
+    "checklist": [
+      "Uses design tokens (no raw colors, no inline typography).",
+      "Reuses approved components (no one-off UI patterns).",
+      "Implements loading/empty/error/success states.",
+      "Dark mode verified for bg/text/border/hover/disabled.",
+      "Destructive actions require confirmation dialogs.",
+      "RBAC reflected in UI visibility and route protection.",
+      "No direct fetch/axios in components; uses API client + TanStack Query."
+    ]
+  }
+}
