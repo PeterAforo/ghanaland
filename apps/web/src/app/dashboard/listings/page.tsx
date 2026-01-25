@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import {
   MapPin,
@@ -17,6 +17,7 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,8 +33,10 @@ interface Listing {
   category: string;
   region: string;
   district: string;
-  priceGhs: number;
-  sizeAcres: number;
+  priceGhs: string;
+  sizeAcres: string;
+  pricePerPlot?: string;
+  totalPlots?: number;
   listingStatus: string;
   verificationStatus: string;
   viewCount: number;
@@ -42,55 +45,115 @@ interface Listing {
 
 export default function UserListingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const createdId = searchParams.get('created');
+
+  const fetchListings = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        router.push('/auth/login');
+        return;
+      }
+
+      const params = new URLSearchParams();
+      if (statusFilter) params.set('status', statusFilter);
+      params.set('page', page.toString());
+      params.set('limit', '20');
+
+      const res = await fetch(`/api/v1/listings/my?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          router.push('/auth/login');
+          return;
+        }
+        throw new Error('Failed to fetch listings');
+      }
+
+      const result = await res.json();
+      if (result.success) {
+        setListings(result.data);
+        setTotal(result.meta?.pagination?.total || result.data.length);
+      }
+    } catch (err) {
+      console.error('Error fetching listings:', err);
+      setError('Failed to load listings. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [statusFilter, page, router]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/auth/login');
+    } else if (isAuthenticated) {
+      fetchListings();
     }
-  }, [authLoading, isAuthenticated, router]);
+  }, [authLoading, isAuthenticated, router, fetchListings]);
 
-  // Mock data - will be replaced with API call
-  const listings: Listing[] = [
-    {
-      id: '1',
-      title: '5 Acres Prime Land in East Legon',
-      category: 'RESIDENTIAL',
-      region: 'Greater Accra',
-      district: 'Accra Metropolitan',
-      priceGhs: 2500000,
-      sizeAcres: 5,
-      listingStatus: 'PUBLISHED',
-      verificationStatus: 'VERIFIED',
-      viewCount: 245,
-      createdAt: '2024-01-15T10:00:00Z',
-    },
-    {
-      id: '2',
-      title: 'Commercial Plot in Tema',
-      category: 'COMMERCIAL',
-      region: 'Greater Accra',
-      district: 'Tema Metropolitan',
-      priceGhs: 5000000,
-      sizeAcres: 10,
-      listingStatus: 'DRAFT',
-      verificationStatus: 'UNVERIFIED',
-      viewCount: 0,
-      createdAt: '2024-01-18T14:30:00Z',
-    },
-  ];
+  useEffect(() => {
+    if (createdId) {
+      setSuccessMessage('Listing created successfully!');
+      setTimeout(() => setSuccessMessage(null), 5000);
+    }
+  }, [createdId]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this listing?')) return;
+    
+    setDeleteId(id);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`/api/v1/listings/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete listing');
+      }
+
+      setListings(listings.filter(l => l.id !== id));
+      setSuccessMessage('Listing deleted successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error deleting listing:', err);
+      setError('Failed to delete listing. Please try again.');
+    } finally {
+      setDeleteId(null);
+    }
+  };
 
   const filteredListings = listings.filter((listing) => {
     const matchesSearch =
       !search || listing.title.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = !statusFilter || listing.listingStatus === statusFilter;
-    return matchesSearch && matchesStatus;
+    return matchesSearch;
   });
 
-  if (authLoading) {
+  if (authLoading || (isAuthenticated && isLoading && listings.length === 0)) {
     return <ListingsPageSkeleton />;
   }
 
@@ -130,9 +193,26 @@ export default function UserListingsPage() {
         </header>
 
         <div className="p-6 space-y-6">
+          {/* Success/Error Messages */}
+          {successMessage && (
+            <div className="p-4 rounded-xl bg-green-50 border border-green-200 flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <p className="text-sm text-green-800">{successMessage}</p>
+            </div>
+          )}
+          {error && (
+            <div className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              <p className="text-sm text-red-800">{error}</p>
+              <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-auto">
+                Dismiss
+              </Button>
+            </div>
+          )}
+
           {/* Stats */}
           <div className="grid gap-4 sm:grid-cols-4">
-            <StatCard label="Total Listings" value={listings.length} />
+            <StatCard label="Total Listings" value={total} />
             <StatCard
               label="Published"
               value={listings.filter((l) => l.listingStatus === 'PUBLISHED').length}
@@ -241,7 +321,13 @@ export default function UserListingsPage() {
                             Edit
                           </Button>
                         </Link>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => handleDelete(listing.id)}
+                          disabled={deleteId === listing.id}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>

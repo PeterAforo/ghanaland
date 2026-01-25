@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
@@ -157,6 +157,157 @@ export class ListingsService {
         sizeAcres: listing.sizeAcres.toString(),
         pricePerPlot: listing.pricePerPlot?.toString() || null,
       },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async findByUser(userId: string, query: any) {
+    const { status, page = 1, limit = 20 } = query;
+
+    const where: any = {
+      sellerId: userId,
+    };
+
+    if (status) where.listingStatus = status;
+
+    const [listings, total] = await Promise.all([
+      this.prisma.listing.findMany({
+        where,
+        include: {
+          media: { take: 1 },
+        },
+        skip: (parseInt(page) - 1) * parseInt(limit),
+        take: parseInt(limit),
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.listing.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      data: listings.map((l) => ({
+        ...l,
+        priceGhs: l.priceGhs.toString(),
+        sizeAcres: l.sizeAcres.toString(),
+        pricePerPlot: l.pricePerPlot?.toString() || null,
+      })),
+      meta: {
+        requestId: `req_${Date.now()}`,
+        pagination: {
+          page: parseInt(page),
+          pageSize: parseInt(limit),
+          total,
+        },
+      },
+      error: null,
+    };
+  }
+
+  async update(userId: string, id: string, dto: any) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id },
+    });
+
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    if (listing.sellerId !== userId) {
+      throw new ForbiddenException('You can only update your own listings');
+    }
+
+    // Calculate total price from per-plot pricing if provided
+    const pricePerPlot = dto.pricePerPlot ? parseFloat(dto.pricePerPlot) : (listing.pricePerPlot ? Number(listing.pricePerPlot) : 0);
+    const totalPlots = dto.totalPlots || listing.totalPlots || 0;
+    const totalPrice = pricePerPlot * totalPlots;
+
+    // Calculate size in acres from plot dimensions if provided
+    let sizeAcres = dto.sizeAcres || Number(listing.sizeAcres) || 0;
+    const plotLength = dto.plotLength || listing.plotLength;
+    const plotWidth = dto.plotWidth || listing.plotWidth;
+    const plotDimensionUnit = dto.plotDimensionUnit || listing.plotDimensionUnit;
+    
+    if (plotLength && plotWidth && totalPlots) {
+      const plotArea = plotLength * plotWidth;
+      const totalArea = plotArea * totalPlots;
+      if (plotDimensionUnit === 'FEET') {
+        sizeAcres = totalArea / 43560;
+      } else if (plotDimensionUnit === 'METERS') {
+        sizeAcres = totalArea / 4046.86;
+      }
+    }
+
+    const updated = await this.prisma.listing.update({
+      where: { id },
+      data: {
+        title: dto.title ?? listing.title,
+        description: dto.description ?? listing.description,
+        category: dto.category ?? listing.category,
+        landType: dto.landType ?? listing.landType,
+        tenureType: dto.tenureType ?? listing.tenureType,
+        leasePeriodYears: dto.leasePeriodYears ?? listing.leasePeriodYears,
+        sizeAcres: sizeAcres,
+        priceGhs: totalPrice || dto.priceGhs || Number(listing.priceGhs),
+        
+        plotLength: dto.plotLength ?? listing.plotLength,
+        plotWidth: dto.plotWidth ?? listing.plotWidth,
+        plotDimensionUnit: dto.plotDimensionUnit ?? listing.plotDimensionUnit,
+        totalPlots: dto.totalPlots ?? listing.totalPlots,
+        availablePlots: dto.availablePlots ?? listing.availablePlots,
+        pricePerPlot: pricePerPlot || listing.pricePerPlot,
+        
+        allowOneTimePayment: dto.allowOneTimePayment ?? listing.allowOneTimePayment,
+        allowInstallments: dto.allowInstallments ?? listing.allowInstallments,
+        installmentPackages: dto.installmentPackages ?? listing.installmentPackages,
+        
+        landAccessPercentage: dto.landAccessPercentage ?? listing.landAccessPercentage,
+        sitePlanAccessPercentage: dto.sitePlanAccessPercentage ?? listing.sitePlanAccessPercentage,
+        documentTransferPercentage: dto.documentTransferPercentage ?? listing.documentTransferPercentage,
+        
+        region: dto.region ?? listing.region,
+        district: dto.district ?? listing.district,
+        constituency: dto.constituency ?? listing.constituency,
+        town: dto.town ?? listing.town,
+        address: dto.address ?? listing.address,
+        latitude: dto.latitude ?? listing.latitude,
+        longitude: dto.longitude ?? listing.longitude,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        ...updated,
+        priceGhs: updated.priceGhs.toString(),
+        sizeAcres: updated.sizeAcres.toString(),
+        pricePerPlot: updated.pricePerPlot?.toString() || null,
+      },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async delete(userId: string, id: string) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id },
+    });
+
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    if (listing.sellerId !== userId) {
+      throw new ForbiddenException('You can only delete your own listings');
+    }
+
+    await this.prisma.listing.delete({
+      where: { id },
+    });
+
+    return {
+      success: true,
+      data: { id },
       meta: { requestId: `req_${Date.now()}` },
       error: null,
     };
