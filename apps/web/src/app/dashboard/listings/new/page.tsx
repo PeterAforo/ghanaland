@@ -373,6 +373,12 @@ export default function NewListingPage() {
     try {
       const token = localStorage.getItem('accessToken');
       
+      if (!token) {
+        setError('You must be logged in to create a listing. Please log in and try again.');
+        router.push('/auth/login?redirect=/dashboard/listings/new');
+        return;
+      }
+      
       // Clean up NaN values before sending
       const cleanData = {
         ...data,
@@ -402,8 +408,17 @@ export default function NewListingPage() {
 
       if (!res.ok) {
         const errorText = await res.text();
-        setError(`Server error: ${res.status}. Please try again.`);
         console.error('Server error:', errorText);
+        
+        if (res.status === 401) {
+          setError('Your session has expired. Please log in again.');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          router.push('/auth/login?redirect=/dashboard/listings/new');
+          return;
+        }
+        
+        setError(`Server error: ${res.status}. Please try again.`);
         return;
       }
 
