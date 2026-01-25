@@ -86,38 +86,38 @@ const installmentPackageSchema = z.object({
 
 const listingSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters').max(200),
-  description: z.string().max(5000).optional(),
+  description: z.string().max(5000).optional().or(z.literal('')),
   category: z.enum(['RESIDENTIAL', 'COMMERCIAL', 'INDUSTRIAL', 'AGRICULTURAL', 'MIXED_USE']),
   landType: z.enum(['CUSTOMARY', 'TITLED', 'LEASEHOLD', 'FREEHOLD', 'GOVERNMENT']),
   tenureType: z.enum(['FREEHOLD', 'LEASEHOLD', 'CUSTOMARY']),
-  leasePeriodYears: z.number().int().positive().optional(),
+  leasePeriodYears: z.number().int().positive().optional().or(z.nan()),
   
   // Location
   region: z.string().min(1, 'Region is required'),
   constituency: z.string().min(1, 'Constituency is required'),
   district: z.string().min(1, 'District is required'),
-  town: z.string().optional(),
-  address: z.string().optional(),
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional(),
+  town: z.string().optional().or(z.literal('')),
+  address: z.string().optional().or(z.literal('')),
+  latitude: z.number().min(-90).max(90).optional().or(z.nan()),
+  longitude: z.number().min(-180).max(180).optional().or(z.nan()),
   
   // Sizing - Per Plot
-  plotLength: z.number().positive('Length is required'),
-  plotWidth: z.number().positive('Width is required'),
+  plotLength: z.number({ invalid_type_error: 'Length is required' }).positive('Length must be positive'),
+  plotWidth: z.number({ invalid_type_error: 'Width is required' }).positive('Width must be positive'),
   plotDimensionUnit: z.enum(['FEET', 'METERS']),
-  totalPlots: z.number().int().positive('Number of plots is required'),
+  totalPlots: z.number({ invalid_type_error: 'Number of plots is required' }).int().positive('Must be at least 1 plot'),
   
   // Pricing - Per Plot
-  pricePerPlot: z.number().positive('Price per plot is required'),
+  pricePerPlot: z.number({ invalid_type_error: 'Price is required' }).positive('Price must be positive'),
   
   // Payment Options
   allowOneTimePayment: z.boolean(),
   allowInstallments: z.boolean(),
   
   // Conditions
-  landAccessPercentage: z.number().min(0).max(100).optional(),
-  sitePlanAccessPercentage: z.number().min(0).max(100).optional(),
-  documentTransferPercentage: z.number().min(0).max(100).optional(),
+  landAccessPercentage: z.number().min(0).max(100).optional().or(z.nan()),
+  sitePlanAccessPercentage: z.number().min(0).max(100).optional().or(z.nan()),
+  documentTransferPercentage: z.number().min(0).max(100).optional().or(z.nan()),
 });
 
 type ListingForm = z.infer<typeof listingSchema>;
@@ -373,8 +373,19 @@ export default function NewListingPage() {
     try {
       const token = localStorage.getItem('accessToken');
       
-      const payload = {
+      // Clean up NaN values before sending
+      const cleanData = {
         ...data,
+        latitude: Number.isNaN(data.latitude) ? undefined : data.latitude,
+        longitude: Number.isNaN(data.longitude) ? undefined : data.longitude,
+        leasePeriodYears: Number.isNaN(data.leasePeriodYears) ? undefined : data.leasePeriodYears,
+        landAccessPercentage: Number.isNaN(data.landAccessPercentage) ? undefined : data.landAccessPercentage,
+        sitePlanAccessPercentage: Number.isNaN(data.sitePlanAccessPercentage) ? undefined : data.sitePlanAccessPercentage,
+        documentTransferPercentage: Number.isNaN(data.documentTransferPercentage) ? undefined : data.documentTransferPercentage,
+      };
+      
+      const payload = {
+        ...cleanData,
         installmentPackages,
         images: images.map(img => img.url),
         videoUrl: video?.url,
@@ -389,6 +400,13 @@ export default function NewListingPage() {
         body: JSON.stringify(payload),
       });
 
+      if (!res.ok) {
+        const errorText = await res.text();
+        setError(`Server error: ${res.status}. Please try again.`);
+        console.error('Server error:', errorText);
+        return;
+      }
+
       const result = await res.json();
 
       if (!result.success) {
@@ -398,9 +416,20 @@ export default function NewListingPage() {
 
       router.push(`/dashboard/listings?created=${result.data.id}`);
     } catch (err) {
+      console.error('Submit error:', err);
       setError('An error occurred. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const onFormError = (errors: any) => {
+    console.error('Form validation errors:', errors);
+    const firstError = Object.values(errors)[0] as any;
+    if (firstError?.message) {
+      setError(`Validation error: ${firstError.message}`);
+    } else {
+      setError('Please fill in all required fields correctly.');
     }
   };
 
@@ -445,7 +474,7 @@ export default function NewListingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)}>
+            <form onSubmit={handleSubmit(onSubmit, onFormError)}>
               {error && (
                 <div className="mb-4 p-3 rounded-xl bg-destructive/10 text-destructive text-sm">
                   {error}
@@ -1198,8 +1227,8 @@ export default function NewListingPage() {
                     </ReviewSection>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-warning/10 border border-warning/20">
-                    <p className="text-sm text-warning-foreground">
+                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
+                    <p className="text-sm text-amber-800">
                       Your listing will be saved as a <strong>draft</strong>. You can submit it for
                       review from your dashboard.
                     </p>
