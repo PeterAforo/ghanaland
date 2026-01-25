@@ -47,6 +47,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/v1/users/me', {
         headers: { Authorization: `Bearer ${token}` },
       });
+
+      // Handle non-OK responses
+      if (!res.ok) {
+        // Token expired or invalid, try refresh
+        const refreshed = await refreshToken();
+        if (!refreshed) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          setUser(null);
+        }
+        setIsLoading(false);
+        return;
+      }
+
       const result = await res.json();
 
       if (result.success) {
@@ -62,6 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Failed to fetch user:', error);
+      // Clear invalid tokens
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -78,12 +95,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: refreshTokenValue }),
       });
+
+      if (!res.ok) {
+        return false;
+      }
+
       const result = await res.json();
 
       if (result.success) {
         localStorage.setItem('accessToken', result.data.accessToken);
         localStorage.setItem('refreshToken', result.data.refreshToken);
-        await fetchUser();
+        // Fetch user with new token
+        const userRes = await fetch('/api/v1/users/me', {
+          headers: { Authorization: `Bearer ${result.data.accessToken}` },
+        });
+        if (userRes.ok) {
+          const userResult = await userRes.json();
+          if (userResult.success) {
+            setUser(userResult.data);
+          }
+        }
         return true;
       }
     } catch (error) {
