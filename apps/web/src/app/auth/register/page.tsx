@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useAuth } from '@/lib/auth';
 import {
   Eye,
   EyeOff,
@@ -77,6 +78,7 @@ type RegisterForm = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { register: registerUser } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -129,35 +131,20 @@ export default function RegisterPage() {
     setIsLoading(true);
     setError(null);
 
-    try {
-      const res = await fetch('/api/v1/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: data.email,
-          password: data.password,
-          fullName: data.fullName,
-          phone: data.phone,
-        }),
-      });
+    const result = await registerUser({
+      email: data.email,
+      password: data.password,
+      fullName: data.fullName,
+      phone: data.phone,
+    });
 
-      const result = await res.json();
-
-      if (!result.success) {
-        setError(result.error?.message || 'Registration failed');
-        return;
-      }
-
-      // Store tokens
-      localStorage.setItem('accessToken', result.data.accessToken);
-      localStorage.setItem('refreshToken', result.data.refreshToken);
-
+    if (result.success) {
       router.push('/dashboard');
-    } catch (err) {
-      setError('An error occurred. Please try again.');
-    } finally {
-      setIsLoading(false);
+    } else {
+      setError(result.error || 'Registration failed');
     }
+
+    setIsLoading(false);
   };
 
   return (

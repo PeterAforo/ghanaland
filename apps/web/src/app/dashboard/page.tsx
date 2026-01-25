@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth';
 import {
   LayoutDashboard,
   MapPin,
@@ -39,52 +40,20 @@ interface RecentActivity {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState<DashboardStats>({
+  const { user, isLoading, isAuthenticated, logout } = useAuth();
+
+  const stats: DashboardStats = {
     totalListings: 0,
     activeListings: 0,
     totalViews: 0,
     pendingTransactions: 0,
-  });
+  };
 
   useEffect(() => {
-    // Check auth
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
+    if (!isLoading && !isAuthenticated) {
       router.push('/auth/login');
-      return;
     }
-
-    // Fetch user data
-    fetchUserData(token);
-  }, [router]);
-
-  const fetchUserData = async (token: string) => {
-    try {
-      const res = await fetch('/api/v1/users/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const result = await res.json();
-
-      if (result.success) {
-        setUser(result.data);
-      } else {
-        localStorage.removeItem('accessToken');
-        router.push('/auth/login');
-      }
-    } catch (error) {
-      console.error('Failed to fetch user:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    router.push('/');
-  };
+  }, [isLoading, isAuthenticated, router]);
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -129,7 +98,7 @@ export default function DashboardPage() {
             <Button
               variant="ghost"
               className="w-full mt-3 justify-start text-muted-foreground"
-              onClick={handleLogout}
+              onClick={logout}
             >
               <LogOut className="mr-2 h-4 w-4" />
               Sign out

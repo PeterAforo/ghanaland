@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useAuth } from '@/lib/auth';
 import { Eye, EyeOff, Loader2, Mail, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,30 +38,15 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
 
-    try {
-      const res = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
+    const result = await login(data.email, data.password);
 
-      const result = await res.json();
-
-      if (!result.success) {
-        setError(result.error?.message || 'Login failed');
-        return;
-      }
-
-      // Store tokens
-      localStorage.setItem('accessToken', result.data.accessToken);
-      localStorage.setItem('refreshToken', result.data.refreshToken);
-
+    if (result.success) {
       router.push('/dashboard');
-    } catch (err) {
-      setError('An error occurred. Please try again.');
-    } finally {
-      setIsLoading(false);
+    } else {
+      setError(result.error || 'Login failed');
     }
+
+    setIsLoading(false);
   };
 
   return (
