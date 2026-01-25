@@ -30,6 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { Skeleton } from '@/components/feedback/loading-skeleton';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { Header } from '@/components/layout/header';
 
 interface InstallmentPackage {
   id: string;
@@ -200,23 +201,7 @@ export default function ListingDetailPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-primary">
-            Ghana Lands
-          </Link>
-          <nav className="flex items-center gap-4">
-            <Link href="/listings" className="text-sm text-muted-foreground hover:text-foreground">
-              Listings
-            </Link>
-            <Link href="/auth/login">
-              <Button variant="ghost" size="sm">
-                Login
-              </Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Header />
 
       <div className="mx-auto max-w-6xl px-4 py-6">
         {/* Back Link */}

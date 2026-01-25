@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { CardSkeleton } from '@/components/feedback/loading-skeleton';
 import { formatPrice } from '@/lib/utils';
+import { Header } from '@/components/layout/header';
 
 const REGIONS = [
   'All Regions',
@@ -81,23 +82,7 @@ export default function ListingsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-primary">
-            Ghana Lands
-          </Link>
-          <nav className="flex items-center gap-4">
-            <Link href="/listings" className="text-sm font-medium text-foreground">
-              Listings
-            </Link>
-            <Link href="/auth/login">
-              <Button variant="ghost" size="sm">
-                Login
-              </Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Header />
 
       <div className="mx-auto max-w-6xl px-4 py-6">
         {/* Page Title */}

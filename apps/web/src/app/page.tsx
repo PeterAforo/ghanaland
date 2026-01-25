@@ -1,33 +1,13 @@
 import Link from 'next/link';
 import { MapPin, Shield, Banknote, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Header } from '@/components/layout/header';
 
 export default function HomePage() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-primary">
-            Ghana Lands
-          </Link>
-          <nav className="flex items-center gap-4">
-            <Link href="/listings" className="text-sm text-muted-foreground hover:text-foreground">
-              Listings
-            </Link>
-            <Link href="/auth/login">
-              <Button variant="ghost" size="sm">
-                Login
-              </Button>
-            </Link>
-            <Link href="/auth/register">
-              <Button variant="primary" size="sm">
-                Get Started
-              </Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Header />
 
       {/* Hero */}
       <section className="bg-gradient-to-b from-primary/5 to-background py-20">
