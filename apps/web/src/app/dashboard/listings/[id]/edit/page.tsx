@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
-import { ArrowLeft, Save, Loader2, MapPin, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, MapPin, Plus, Trash2, Image as ImageIcon, Video, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,22 @@ interface InstallmentPackage {
   durationMonths: number;
   interestRate: number;
   initialDepositPercent: number;
+}
+
+interface MediaFile {
+  id: string;
+  url: string;
+  type: string;
+  isExisting?: boolean;
+}
+
+interface UploadedFile {
+  id: string;
+  name: string;
+  type: 'image' | 'video';
+  url: string;
+  file?: File;
+  isExisting?: boolean;
 }
 
 interface Listing {
@@ -45,6 +61,7 @@ interface Listing {
   sitePlanAccessPercentage?: number;
   documentTransferPercentage?: number;
   listingStatus: string;
+  media?: MediaFile[];
 }
 
 export default function EditListingPage() {
@@ -93,6 +110,11 @@ export default function EditListingPage() {
   const [landAccessPercentage, setLandAccessPercentage] = useState<number | ''>('');
   const [sitePlanAccessPercentage, setSitePlanAccessPercentage] = useState<number | ''>('');
   const [documentTransferPercentage, setDocumentTransferPercentage] = useState<number | ''>('');
+  
+  // Media
+  const [images, setImages] = useState<UploadedFile[]>([]);
+  const [video, setVideo] = useState<UploadedFile | null>(null);
+  const [deletedMediaIds, setDeletedMediaIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -161,6 +183,35 @@ export default function EditListingPage() {
         setLandAccessPercentage(data.landAccessPercentage || '');
         setSitePlanAccessPercentage(data.sitePlanAccessPercentage || '');
         setDocumentTransferPercentage(data.documentTransferPercentage || '');
+        
+        // Media
+        if (data.media && data.media.length > 0) {
+          const existingImages: UploadedFile[] = [];
+          let existingVideo: UploadedFile | null = null;
+          
+          data.media.forEach((m: MediaFile) => {
+            if (m.type === 'VIDEO') {
+              existingVideo = {
+                id: m.id,
+                name: 'Existing video',
+                type: 'video',
+                url: m.url,
+                isExisting: true,
+              };
+            } else {
+              existingImages.push({
+                id: m.id,
+                name: 'Existing image',
+                type: 'image',
+                url: m.url,
+                isExisting: true,
+              });
+            }
+          });
+          
+          setImages(existingImages);
+          setVideo(existingVideo);
+        }
       }
     } catch (err) {
       console.error('Error fetching listing:', err);
@@ -168,6 +219,53 @@ export default function EditListingPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Media handlers
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    Array.from(files).forEach((file) => {
+      const newImage: UploadedFile = {
+        id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: file.name,
+        type: 'image',
+        url: URL.createObjectURL(file),
+        file: file,
+        isExisting: false,
+      };
+      setImages((prev) => [...prev, newImage]);
+    });
+  };
+
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const newVideo: UploadedFile = {
+      id: `vid_${Date.now()}`,
+      name: file.name,
+      type: 'video',
+      url: URL.createObjectURL(file),
+      file: file,
+      isExisting: false,
+    };
+    setVideo(newVideo);
+  };
+
+  const removeImage = (img: UploadedFile) => {
+    if (img.isExisting) {
+      setDeletedMediaIds((prev) => [...prev, img.id]);
+    }
+    setImages((prev) => prev.filter((i) => i.id !== img.id));
+  };
+
+  const removeVideo = () => {
+    if (video?.isExisting) {
+      setDeletedMediaIds((prev) => [...prev, video.id]);
+    }
+    setVideo(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -657,6 +755,117 @@ export default function EditListingPage() {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                Photos & Video
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Images */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">
+                  Photos <span className="text-muted-foreground">(up to 10 images)</span>
+                </label>
+                
+                {images.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                    {images.map((img) => (
+                      <div key={img.id} className="relative group">
+                        <img
+                          src={img.url}
+                          alt={img.name}
+                          className="w-full h-24 object-cover rounded-xl"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(img)}
+                          className="absolute top-1 right-1 p-1 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        {img.isExisting && (
+                          <span className="absolute bottom-1 left-1 text-xs bg-black/50 text-white px-1 rounded">
+                            Existing
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {images.length < 10 && (
+                  <label className="border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 transition-colors block">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    <ImageIcon className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Click to upload photos or drag and drop
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      PNG, JPG up to 5MB each
+                    </p>
+                  </label>
+                )}
+              </div>
+
+              {/* Video */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">
+                  Video <span className="text-muted-foreground">(optional, 1 video)</span>
+                </label>
+                
+                {video ? (
+                  <div className="relative">
+                    <video
+                      src={video.url}
+                      controls
+                      className="w-full h-48 object-cover rounded-xl"
+                    />
+                    <button
+                      type="button"
+                      onClick={removeVideo}
+                      className="absolute top-2 right-2 p-2 rounded-full bg-destructive text-destructive-foreground"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                    {video.isExisting && (
+                      <span className="absolute bottom-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded">
+                        Existing video
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 transition-colors block">
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoUpload}
+                      className="hidden"
+                    />
+                    <Video className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Click to upload a video
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      MP4, MOV up to 50MB
+                    </p>
+                  </label>
+                )}
+              </div>
+              
+              <p className="text-xs text-muted-foreground">
+                Note: Media upload functionality requires file storage to be configured. Currently showing preview only.
+              </p>
             </CardContent>
           </Card>
 
