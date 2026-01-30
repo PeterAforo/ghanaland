@@ -13,6 +13,9 @@ import {
   Settings,
   LogOut,
   Bell,
+  FileText,
+  Briefcase,
+  Activity,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -85,6 +88,24 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               active={pathname === '/admin/verifications'}
             />
             <AdminNavItem
+              href="/admin/permits"
+              icon={<FileText className="h-5 w-5" />}
+              label="Permits"
+              active={pathname.startsWith('/admin/permits')}
+            />
+            <AdminNavItem
+              href="/admin/service-requests"
+              icon={<Briefcase className="h-5 w-5" />}
+              label="Service Requests"
+              active={pathname.startsWith('/admin/service-requests')}
+            />
+            <AdminNavItem
+              href="/admin/audit-logs"
+              icon={<Activity className="h-5 w-5" />}
+              label="Audit Logs"
+              active={pathname.startsWith('/admin/audit-logs')}
+            />
+            <AdminNavItem
               href="/admin/settings"
               icon={<Settings className="h-5 w-5" />}
               label="Settings"
@@ -129,7 +150,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             </Link>
           </div>
           <div className="flex items-center gap-3 ml-auto">
-            <Button variant="ghost" size="icon" className="relative">
+            <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
               <Bell className="h-5 w-5" />
               <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
             </Button>

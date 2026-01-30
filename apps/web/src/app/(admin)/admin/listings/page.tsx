@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   MapPin,
@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { AdminLayout } from '../_components/admin-layout';
+import { API_BASE_URL } from '@/lib/api';
 
 interface Listing {
   id: string;
@@ -29,70 +30,65 @@ interface Listing {
   category: string;
   region: string;
   district: string;
-  priceGhs: number;
-  sizeAcres: number;
+  priceGhs: string;
+  sizeAcres: string;
   listingStatus: string;
   verificationStatus: string;
   seller: { fullName: string };
   createdAt: string;
 }
 
+interface Pagination {
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export default function AdminListingsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, pageSize: 20, total: 0 });
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock data
-  const listings: Listing[] = [
-    {
-      id: '1',
-      title: '5 Acres Prime Land in East Legon',
-      category: 'RESIDENTIAL',
-      region: 'Greater Accra',
-      district: 'Accra Metropolitan',
-      priceGhs: 2500000,
-      sizeAcres: 5,
-      listingStatus: 'PUBLISHED',
-      verificationStatus: 'VERIFIED',
-      seller: { fullName: 'John Doe' },
-      createdAt: '2024-01-15T10:00:00Z',
-    },
-    {
-      id: '2',
-      title: 'Commercial Plot in Tema Industrial Area',
-      category: 'COMMERCIAL',
-      region: 'Greater Accra',
-      district: 'Tema Metropolitan',
-      priceGhs: 5000000,
-      sizeAcres: 10,
-      listingStatus: 'UNDER_REVIEW',
-      verificationStatus: 'PENDING',
-      seller: { fullName: 'Jane Smith' },
-      createdAt: '2024-01-18T14:30:00Z',
-    },
-    {
-      id: '3',
-      title: 'Agricultural Land in Ashanti Region',
-      category: 'AGRICULTURAL',
-      region: 'Ashanti',
-      district: 'Kumasi Metropolitan',
-      priceGhs: 800000,
-      sizeAcres: 20,
-      listingStatus: 'DRAFT',
-      verificationStatus: 'UNVERIFIED',
-      seller: { fullName: 'Kwame Asante' },
-      createdAt: '2024-01-20T09:15:00Z',
-    },
-  ];
+  useEffect(() => {
+    fetchListings();
+  }, [page, statusFilter]);
 
-  const filteredListings = listings.filter((listing) => {
-    const matchesSearch =
-      !search ||
-      listing.title.toLowerCase().includes(search.toLowerCase()) ||
-      listing.region.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = !statusFilter || listing.listingStatus === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const fetchListings = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '20',
+        ...(statusFilter && { status: statusFilter }),
+        ...(search && { search }),
+      });
+
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/listings?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setListings(data.data);
+        setPagination(data.meta.pagination);
+      }
+    } catch (error) {
+      console.error('Failed to fetch listings:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = () => {
+    setPage(1);
+    fetchListings();
+  };
+
+  const filteredListings = listings;
 
   return (
     <AdminLayout>
@@ -111,7 +107,7 @@ export default function AdminListingsPage() {
 
         {/* Stats */}
         <div className="grid gap-4 sm:grid-cols-5">
-          <StatCard label="Total" value={listings.length} />
+          <StatCard label="Total" value={pagination.total} />
           <StatCard
             label="Published"
             value={listings.filter((l) => l.listingStatus === 'PUBLISHED').length}
@@ -212,10 +208,10 @@ export default function AdminListingsPage() {
                       </td>
                       <td className="p-4">
                         <p className="font-medium text-foreground">
-                          {formatPrice(listing.priceGhs)}
+                          {formatPrice(parseFloat(listing.priceGhs))}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {formatPrice(listing.priceGhs / listing.sizeAcres)}/acre
+                          {formatPrice(parseFloat(listing.priceGhs) / parseFloat(listing.sizeAcres))}/acre
                         </p>
                       </td>
                       <td className="p-4">
@@ -262,14 +258,26 @@ export default function AdminListingsPage() {
             {/* Pagination */}
             <div className="flex items-center justify-between p-4 border-t border-border">
               <p className="text-sm text-muted-foreground">
-                Showing {filteredListings.length} of {listings.length} listings
+                Showing {listings.length} of {pagination.total} listings
               </p>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" disabled={page === 1}>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  disabled={page === 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span className="text-sm text-muted-foreground">Page {page}</span>
-                <Button variant="ghost" size="sm">
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {Math.ceil(pagination.total / pagination.pageSize) || 1}
+                </span>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  disabled={page >= Math.ceil(pagination.total / pagination.pageSize)}
+                  onClick={() => setPage(p => p + 1)}
+                >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>

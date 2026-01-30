@@ -109,3 +109,105 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Mobile-first responsive utilities */
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Touch-friendly tap targets */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Mobile scrolling improvements */
+  .scroll-smooth-mobile {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Mobile-friendly text selection */
+  .select-touch {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Prevent zoom on input focus (iOS) */
+  @media screen and (max-width: 768px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="tel"],
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Mobile card shadows */
+  .shadow-mobile {
+    @apply shadow-sm;
+  }
+  @media (min-width: 768px) {
+    .shadow-mobile {
+      @apply shadow-md;
+    }
+  }
+
+  /* Mobile-optimized grid gaps */
+  .gap-mobile {
+    @apply gap-3 sm:gap-4 md:gap-6;
+  }
+
+  /* Mobile padding */
+  .px-mobile {
+    @apply px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Mobile-friendly line clamp */
+  .line-clamp-mobile-2 {
+    @apply line-clamp-2 sm:line-clamp-none;
+  }
+
+  /* Bottom navigation safe area */
+  .pb-nav-safe {
+    @apply pb-20 sm:pb-6;
+  }
+}
+
+/* Mobile bottom navigation styles */
+@media (max-width: 640px) {
+  .mobile-bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Improve touch feedback */
+@media (hover: none) and (pointer: coarse) {
+  .hover\:bg-muted:active {
+    @apply bg-muted;
+  }
+  
+  button:active,
+  a:active {
+    opacity: 0.7;
+    transition: opacity 0.1s;
+  }
+}

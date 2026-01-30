@@ -268,6 +268,69 @@ export default function EditListingPage() {
     setVideo(null);
   };
 
+  const uploadNewMedia = async (token: string): Promise<boolean> => {
+    const filesToUpload: File[] = [];
+    
+    // Collect new images (not existing ones)
+    images.forEach((img) => {
+      if (img.file && !img.isExisting) {
+        filesToUpload.push(img.file);
+      }
+    });
+    
+    // Collect new video
+    if (video?.file && !video.isExisting) {
+      filesToUpload.push(video.file);
+    }
+
+    if (filesToUpload.length === 0) return true;
+
+    try {
+      const formData = new FormData();
+      filesToUpload.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      const res = await fetch(`/api/v1/listings/${id}/media`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        console.error('Media upload failed:', await res.text());
+        return false;
+      }
+
+      const result = await res.json();
+      return result.success;
+    } catch (err) {
+      console.error('Media upload error:', err);
+      return false;
+    }
+  };
+
+  const deleteRemovedMedia = async (token: string): Promise<boolean> => {
+    if (deletedMediaIds.length === 0) return true;
+
+    try {
+      for (const mediaId of deletedMediaIds) {
+        await fetch(`/api/v1/listings/${id}/media/${mediaId}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      }
+      return true;
+    } catch (err) {
+      console.error('Media delete error:', err);
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -276,6 +339,14 @@ export default function EditListingPage() {
 
     try {
       const token = localStorage.getItem('accessToken');
+      
+      if (!token) {
+        setError('You are not logged in. Please log in again.');
+        router.push('/auth/login');
+        return;
+      }
+      
+      // Step 1: Update listing data
       const res = await fetch(`/api/v1/listings/${id}`, {
         method: 'PUT',
         headers: {
@@ -312,13 +383,29 @@ export default function EditListingPage() {
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          setError('Your session has expired. Please log in again.');
+          localStorage.removeItem('accessToken');
+          router.push('/auth/login');
+          return;
+        }
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || 'Failed to update listing');
+        throw new Error(errorData.error?.message || errorData.message || 'Failed to update listing');
       }
 
       const result = await res.json();
       if (result.success) {
-        setSuccess('Listing updated successfully!');
+        // Step 2: Delete removed media
+        await deleteRemovedMedia(token);
+        
+        // Step 3: Upload new media
+        const mediaUploaded = await uploadNewMedia(token);
+        if (!mediaUploaded) {
+          setSuccess('Listing updated, but some media failed to upload.');
+        } else {
+          setSuccess('Listing updated successfully!');
+        }
+        
         setTimeout(() => {
           router.push('/dashboard/listings');
         }, 1500);

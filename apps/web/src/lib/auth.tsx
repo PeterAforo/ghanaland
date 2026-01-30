@@ -2,13 +2,19 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_BASE_URL } from './api';
 
 interface User {
   id: string;
   email: string;
   fullName: string;
+  phone?: string;
   avatarUrl?: string;
   roles: string[];
+  createdAt?: string;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  twoFactorEnabled?: boolean;
 }
 
 interface AuthContextType {
@@ -26,6 +32,7 @@ interface RegisterData {
   password: string;
   fullName: string;
   phone?: string;
+  ghanaCardNumber: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -44,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const res = await fetch('/api/v1/users/me', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -90,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!refreshTokenValue) return false;
 
     try {
-      const res = await fetch('/api/v1/auth/refresh', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: refreshTokenValue }),
@@ -106,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('accessToken', result.data.accessToken);
         localStorage.setItem('refreshToken', result.data.refreshToken);
         // Fetch user with new token
-        const userRes = await fetch('/api/v1/users/me', {
+        const userRes = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
           headers: { Authorization: `Bearer ${result.data.accessToken}` },
         });
         if (userRes.ok) {
@@ -129,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const res = await fetch('/api/v1/auth/login', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -151,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (data: RegisterData) => {
     try {
-      const res = await fetch('/api/v1/auth/register', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -174,7 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     const refreshTokenValue = localStorage.getItem('refreshToken');
     if (refreshTokenValue) {
-      fetch('/api/v1/auth/logout', {
+      fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: refreshTokenValue }),

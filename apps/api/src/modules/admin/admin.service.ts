@@ -200,7 +200,7 @@ export class AdminService {
       where.status = status;
     }
 
-    const [transactions, total] = await Promise.all([
+    const [transactions, total, stats, disputedCount] = await Promise.all([
       this.prisma.transaction.findMany({
         where,
         include: {
@@ -214,6 +214,15 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.transaction.count({ where }),
+      // Get aggregate stats for ALL transactions (not filtered)
+      this.prisma.transaction.aggregate({
+        _sum: {
+          agreedPriceGhs: true,
+          platformFeeGhs: true,
+        },
+        _count: true,
+      }),
+      this.prisma.transaction.count({ where: { status: 'DISPUTED' } }),
     ]);
 
     return {
@@ -227,6 +236,12 @@ export class AdminService {
       meta: {
         requestId: `req_${Date.now()}`,
         pagination: { page, pageSize: limit, total },
+        stats: {
+          totalTransactions: stats._count,
+          totalVolume: stats._sum.agreedPriceGhs?.toString() || '0',
+          totalFees: stats._sum.platformFeeGhs?.toString() || '0',
+          disputedCount,
+        },
       },
       error: null,
     };
@@ -290,21 +305,42 @@ export class AdminService {
   // ============================================================================
 
   async getDashboardStats() {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+
     const [
       totalUsers,
       totalListings,
       pendingVerifications,
       activeTransactions,
       disputedTransactions,
+      monthlyRevenue,
+      lastMonthRevenue,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.listing.count(),
       this.prisma.listing.count({ where: { verificationStatus: 'PENDING' } }),
       this.prisma.transaction.count({
-        where: { status: { in: ['ESCROW_FUNDED', 'VERIFICATION_PERIOD', 'READY_TO_RELEASE'] } },
+        where: { status: { in: ['CREATED', 'ESCROW_FUNDED', 'VERIFICATION_PERIOD', 'READY_TO_RELEASE'] } },
       }),
       this.prisma.transaction.count({ where: { status: 'DISPUTED' } }),
+      this.prisma.payment.aggregate({
+        where: { status: 'COMPLETED', paidAt: { gte: startOfMonth } },
+        _sum: { amountGhs: true },
+      }),
+      this.prisma.payment.aggregate({
+        where: { status: 'COMPLETED', paidAt: { gte: startOfLastMonth, lte: endOfLastMonth } },
+        _sum: { amountGhs: true },
+      }),
     ]);
+
+    const currentRevenue = Number(monthlyRevenue._sum.amountGhs || 0);
+    const previousRevenue = Number(lastMonthRevenue._sum.amountGhs || 0);
+    const revenueChange = previousRevenue > 0 
+      ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 
+      : 0;
 
     return {
       success: true,
@@ -314,8 +350,137 @@ export class AdminService {
         pendingVerifications,
         activeTransactions,
         disputedTransactions,
+        monthlyRevenue: currentRevenue,
+        revenueChange: Math.round(revenueChange * 10) / 10,
       },
       meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async getPendingItems() {
+    const [pendingVerifications, pendingListings, disputedTransactions] = await Promise.all([
+      this.prisma.listing.findMany({
+        where: { verificationStatus: 'PENDING' },
+        select: { id: true, title: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+      this.prisma.listing.findMany({
+        where: { listingStatus: 'UNDER_REVIEW' },
+        select: { id: true, title: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+      this.prisma.transaction.findMany({
+        where: { status: 'DISPUTED' },
+        select: { id: true, listing: { select: { title: true } }, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+    ]);
+
+    const items = [
+      ...pendingVerifications.map(v => ({
+        id: v.id,
+        type: 'verification' as const,
+        title: v.title,
+        status: 'pending',
+        createdAt: v.createdAt.toISOString().split('T')[0],
+      })),
+      ...pendingListings.map(l => ({
+        id: l.id,
+        type: 'listing' as const,
+        title: l.title,
+        status: 'under_review',
+        createdAt: l.createdAt.toISOString().split('T')[0],
+      })),
+      ...disputedTransactions.map(t => ({
+        id: t.id,
+        type: 'transaction' as const,
+        title: t.listing?.title || `Transaction #${t.id.slice(-8)}`,
+        status: 'disputed',
+        createdAt: t.createdAt.toISOString().split('T')[0],
+      })),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+     .slice(0, 10);
+
+    return {
+      success: true,
+      data: items,
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  // ============================================================================
+  // AUDIT LOGS
+  // ============================================================================
+
+  async getAuditLogs(query: {
+    entityType?: string;
+    action?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { entityType, action, search, page = 1, limit = 25 } = query;
+
+    const where: any = {};
+
+    if (entityType) {
+      where.entityType = entityType;
+    }
+
+    if (action) {
+      where.action = action;
+    }
+
+    if (search) {
+      where.OR = [
+        { entityId: { contains: search, mode: 'insensitive' } },
+        { actor: { email: { contains: search, mode: 'insensitive' } } },
+        { actor: { fullName: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [logs, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        include: {
+          actor: {
+            select: { id: true, email: true, fullName: true },
+          },
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      data: logs.map((log) => ({
+        id: log.id,
+        action: log.action,
+        entityType: log.entityType,
+        entityId: log.entityId,
+        userId: log.actorUserId,
+        userEmail: log.actor?.email || 'Unknown',
+        userName: log.actor?.fullName || 'Unknown',
+        ipAddress: log.ipAddress,
+        userAgent: log.userAgent,
+        metadata: log.metadata,
+        createdAt: log.createdAt.toISOString(),
+      })),
+      meta: {
+        requestId: `req_${Date.now()}`,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
       error: null,
     };
   }

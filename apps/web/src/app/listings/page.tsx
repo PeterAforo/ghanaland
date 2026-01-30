@@ -9,6 +9,7 @@ import {
   Filter,
   Grid3X3,
   List,
+  Map,
   ChevronDown,
   Shield,
   Loader2,
@@ -19,8 +20,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { CardSkeleton } from '@/components/feedback/loading-skeleton';
+import { FavoriteButton } from '@/components/ui/favorite-button';
 import { formatPrice } from '@/lib/utils';
 import { Header } from '@/components/layout/header';
+import { Footer } from '@/components/layout/footer';
 
 const REGIONS = [
   'All Regions',
@@ -41,6 +44,33 @@ const CATEGORIES = [
   { value: 'AGRICULTURAL', label: 'Agricultural' },
 ];
 
+const LAND_TYPES = [
+  { value: '', label: 'All Land Types' },
+  { value: 'FREEHOLD', label: 'Freehold' },
+  { value: 'LEASEHOLD', label: 'Leasehold' },
+  { value: 'STOOL_LAND', label: 'Stool Land' },
+  { value: 'FAMILY_LAND', label: 'Family Land' },
+  { value: 'STATE_LAND', label: 'State Land' },
+];
+
+const PRICE_RANGES = [
+  { value: '', label: 'Any Price' },
+  { value: '0-50000', label: 'Under GH₵50,000' },
+  { value: '50000-100000', label: 'GH₵50,000 - GH₵100,000' },
+  { value: '100000-500000', label: 'GH₵100,000 - GH₵500,000' },
+  { value: '500000-1000000', label: 'GH₵500,000 - GH₵1,000,000' },
+  { value: '1000000-', label: 'Over GH₵1,000,000' },
+];
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest First' },
+  { value: 'oldest', label: 'Oldest First' },
+  { value: 'price_low', label: 'Price: Low to High' },
+  { value: 'price_high', label: 'Price: High to Low' },
+  { value: 'size_low', label: 'Size: Small to Large' },
+  { value: 'size_high', label: 'Size: Large to Small' },
+];
+
 interface Listing {
   id: string;
   title: string;
@@ -51,6 +81,7 @@ interface Listing {
   priceGhs: string;
   pricePerPlot?: string;
   totalPlots?: number;
+  availablePlots?: number;
   region: string;
   district: string;
   verificationStatus: string;
@@ -63,15 +94,25 @@ export default function ListingsPage() {
   const [search, setSearch] = useState('');
   const [region, setRegion] = useState('');
   const [category, setCategory] = useState('');
+  const [landType, setLandType] = useState('');
+  const [priceRange, setPriceRange] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
   const [showFilters, setShowFilters] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['listings', { search, region, category }],
+    queryKey: ['listings', { search, region, category, landType, priceRange, sortBy }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set('query', search);
       if (region && region !== 'All Regions') params.set('region', region);
       if (category) params.set('category', category);
+      if (landType) params.set('landType', landType);
+      if (priceRange) {
+        const [min, max] = priceRange.split('-');
+        if (min) params.set('minPrice', min);
+        if (max) params.set('maxPrice', max);
+      }
+      params.set('sortBy', sortBy);
 
       const res = await fetch(`/api/v1/listings?${params}`);
       const result = await res.json();
@@ -140,22 +181,31 @@ export default function ListingsPage() {
               <button
                 onClick={() => setViewMode('grid')}
                 className={`p-2.5 ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                title="Grid view"
               >
                 <Grid3X3 className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setViewMode('list')}
                 className={`p-2.5 ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                title="List view"
               >
                 <List className="h-4 w-4" />
               </button>
+              <Link
+                href="/listings/map"
+                className="p-2.5 bg-background text-muted-foreground hover:bg-muted"
+                title="Map view"
+              >
+                <Map className="h-4 w-4" />
+              </Link>
             </div>
           </div>
 
           {/* Extended Filters */}
           {showFilters && (
             <div className="p-4 rounded-xl border border-border bg-card">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
                   <label className="text-sm font-medium text-foreground mb-1.5 block">
                     Category
@@ -172,16 +222,80 @@ export default function ListingsPage() {
                     ))}
                   </select>
                 </div>
-                {/* Add more filters as needed */}
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-1.5 block">
+                    Land Type
+                  </label>
+                  <select
+                    value={landType}
+                    onChange={(e) => setLandType(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {LAND_TYPES.map((lt) => (
+                      <option key={lt.value} value={lt.value}>
+                        {lt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-1.5 block">
+                    Price Range
+                  </label>
+                  <select
+                    value={priceRange}
+                    onChange={(e) => setPriceRange(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {PRICE_RANGES.map((pr) => (
+                      <option key={pr.value} value={pr.value}>
+                        {pr.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-1.5 block">
+                    Sort By
+                  </label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {SORT_OPTIONS.map((so) => (
+                      <option key={so.value} value={so.value}>
+                        {so.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+              {/* Clear Filters */}
+              {(category || landType || priceRange || sortBy !== 'newest') && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setCategory('');
+                      setLandType('');
+                      setPriceRange('');
+                      setSortBy('newest');
+                    }}
+                  >
+                    Clear All Filters
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
 
         {/* Results */}
         {isLoading ? (
-          <div className={`grid gap-4 ${viewMode === 'grid' ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}`}>
-            {[...Array(6)].map((_, i) => (
+          <div className={`grid gap-4 ${viewMode === 'grid' ? 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : ''}`}>
+            {[...Array(8)].map((_, i) => (
               <CardSkeleton key={i} />
             ))}
           </div>
@@ -203,13 +317,14 @@ export default function ListingsPage() {
             description="Try adjusting your search or filters"
           />
         ) : (
-          <div className={`grid gap-4 ${viewMode === 'grid' ? 'sm:grid-cols-2 lg:grid-cols-3' : ''}`}>
+          <div className={`grid gap-4 ${viewMode === 'grid' ? 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : ''}`}>
             {listings.map((listing) => (
               <ListingCard key={listing.id} listing={listing} viewMode={viewMode} />
             ))}
           </div>
         )}
       </div>
+      <Footer />
     </div>
   );
 }
@@ -266,9 +381,9 @@ function ListingCard({ listing, viewMode }: { listing: Listing; viewMode: 'grid'
                     <p className="text-xs text-muted-foreground">per plot</p>
                   )}
                 </div>
-                {listing.totalPlots && (
+                {(listing.availablePlots || listing.totalPlots) && (
                   <p className="text-sm text-muted-foreground">
-                    {listing.totalPlots} plots
+                    {listing.availablePlots || listing.totalPlots} plots
                   </p>
                 )}
               </div>
@@ -280,8 +395,8 @@ function ListingCard({ listing, viewMode }: { listing: Listing; viewMode: 'grid'
   }
 
   return (
-    <Link href={`/listings/${listing.id}`}>
-      <Card className="hover:shadow-md transition-shadow overflow-hidden">
+    <Card className="hover:shadow-md transition-shadow overflow-hidden">
+      <Link href={`/listings/${listing.id}`}>
         <div className="aspect-[4/3] bg-muted relative">
           {imageUrl ? (
             <img src={imageUrl} alt={listing.title} className="w-full h-full object-cover" />
@@ -291,38 +406,41 @@ function ListingCard({ listing, viewMode }: { listing: Listing; viewMode: 'grid'
             </div>
           )}
           {isVerified && (
-            <Badge variant="verified" className="absolute top-3 right-3">
+            <Badge variant="verified" className="absolute top-3 right-12">
               <Shield className="h-3 w-3 mr-1" />
               Verified
             </Badge>
           )}
+          <FavoriteButton listingId={listing.id} className="absolute top-3 right-3" size="sm" />
           <Badge variant="neutral" className="absolute top-3 left-3">
             {formatCategory(listing.category)}
           </Badge>
         </div>
-        <CardContent className="p-4">
-          <h3 className="font-semibold text-foreground truncate">{listing.title}</h3>
-          <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-            <MapPin className="h-3 w-3" />
-            {listing.district}, {listing.region}
-          </p>
-          <div className="flex items-center justify-between mt-3">
-            <div>
-              <p className="text-lg font-bold text-primary">
-                {listing.pricePerPlot ? formatPrice(parseFloat(listing.pricePerPlot)) : formatPrice(parseFloat(listing.priceGhs))}
-              </p>
-              {listing.pricePerPlot && (
-                <p className="text-xs text-muted-foreground">per plot</p>
-              )}
-            </div>
-            {listing.totalPlots && (
-              <p className="text-sm text-muted-foreground">
-                {listing.totalPlots} plots
-              </p>
+      </Link>
+      <CardContent className="p-4">
+        <Link href={`/listings/${listing.id}`}>
+          <h3 className="font-semibold text-foreground truncate hover:text-primary transition-colors">{listing.title}</h3>
+        </Link>
+        <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+          <MapPin className="h-3 w-3" />
+          {listing.district}, {listing.region}
+        </p>
+        <div className="flex items-center justify-between mt-3">
+          <div>
+            <p className="text-lg font-bold text-primary">
+              {listing.pricePerPlot ? formatPrice(parseFloat(listing.pricePerPlot)) : formatPrice(parseFloat(listing.priceGhs))}
+            </p>
+            {listing.pricePerPlot && (
+              <p className="text-xs text-muted-foreground">per plot</p>
             )}
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+          {(listing.availablePlots || listing.totalPlots) && (
+            <p className="text-sm text-muted-foreground">
+              {listing.availablePlots || listing.totalPlots} plots
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

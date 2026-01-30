@@ -7,8 +7,10 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Global prefix
-  app.setGlobalPrefix('api/v1');
+  // Global prefix (exclude root controller)
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['/', 'health'],
+  });
 
   // Global exception filter (standard API response format)
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -24,10 +26,7 @@ async function bootstrap() {
 
   // CORS
   app.enableCors({
-    origin: [
-      process.env.WEB_URL || 'http://localhost:3000',
-      'http://localhost:3002',
-    ],
+    origin: true, // Allow all origins in development
     credentials: true,
   });
 

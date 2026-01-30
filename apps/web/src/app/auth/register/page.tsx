@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/lib/auth';
+import { API_BASE_URL } from '@/lib/api';
 import {
   Eye,
   EyeOff,
@@ -27,6 +28,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Stepper } from '@/components/ui/stepper';
+import { Header } from '@/components/layout/header';
+import { Footer } from '@/components/layout/footer';
 
 const STEPS = [
   { id: 'role', title: 'Account Type', description: 'Choose your role' },
@@ -66,6 +69,7 @@ const registerSchema = z.object({
   accountType: z.enum(['buyer', 'seller', 'agent', 'professional']),
   fullName: z.string().min(2, 'Full name is required'),
   phone: z.string().optional(),
+  ghanaCardNumber: z.string().regex(/^GHA-\d{9}-\d$/, 'Ghana Card must be in format GHA-XXXXXXXXX-X'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string(),
@@ -76,13 +80,23 @@ const registerSchema = z.object({
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
+interface SelectedPlan {
+  name: string;
+  slug: string;
+  priceMonthlyGhs: number;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { register: registerUser } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<SelectedPlan | null>(null);
+
+  const planSlug = searchParams.get('plan');
 
   const {
     register,
@@ -94,9 +108,29 @@ export default function RegisterPage() {
   } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      accountType: 'buyer',
+      accountType: planSlug || 'buyer',
     },
   });
+
+  useEffect(() => {
+    if (planSlug && planSlug !== 'free') {
+      fetchPlanDetails(planSlug);
+      // Auto-select account type based on plan
+      setValue('accountType', planSlug);
+    }
+  }, [planSlug, setValue]);
+
+  const fetchPlanDetails = async (slug: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/subscriptions/plans/${slug}`);
+      const data = await res.json();
+      if (data.success) {
+        setSelectedPlan(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch plan:', error);
+    }
+  };
 
   const accountType = watch('accountType');
   const formValues = watch();
@@ -136,6 +170,7 @@ export default function RegisterPage() {
       password: data.password,
       fullName: data.fullName,
       phone: data.phone,
+      ghanaCardNumber: data.ghanaCardNumber,
     });
 
     if (result.success) {
@@ -148,17 +183,40 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background px-4 py-8">
-      <div className="mx-auto max-w-2xl">
-        {/* Logo */}
-        <div className="text-center mb-6">
-          <Link href="/" className="text-2xl font-bold text-primary">
-            Ghana Lands
-          </Link>
-          <p className="mt-2 text-muted-foreground">
-            Create your account to get started
-          </p>
+    <div className="min-h-screen flex flex-col bg-background">
+      <Header />
+      
+      {/* Selected Plan Banner */}
+      {selectedPlan && (
+        <div className="bg-primary/10 border-b border-primary/20">
+          <div className="mx-auto max-w-2xl px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-primary">
+                  Selected Plan: <span className="font-bold">{selectedPlan.name}</span>
+                </p>
+                <p className="text-xs text-primary/70">
+                  GHS {selectedPlan.priceMonthlyGhs}/month • You'll be able to subscribe after registration
+                </p>
+              </div>
+              <Link href="/pricing" className="text-xs text-primary hover:underline">
+                Change plan
+              </Link>
+            </div>
+          </div>
         </div>
+      )}
+
+      <main className="flex-1 bg-gradient-to-b from-primary/5 to-background px-4 py-8">
+        <div className="mx-auto max-w-2xl">
+          {/* Intro */}
+          <div className="text-center mb-6">
+            <p className="text-muted-foreground">
+              {selectedPlan 
+                ? `Complete your registration to activate your ${selectedPlan.name} plan`
+                : 'Create your account to get started'}
+            </p>
+          </div>
 
         {/* Stepper */}
         <Stepper steps={STEPS} currentStep={currentStep} className="mb-8" />
@@ -253,6 +311,25 @@ export default function RegisterPage() {
                       />
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">
+                      Ghana Card Number <span className="text-destructive">*</span>
+                    </label>
+                    <div className="relative">
+                      <Input
+                        {...register('ghanaCardNumber')}
+                        placeholder="GHA-123456789-0"
+                        className="uppercase"
+                      />
+                    </div>
+                    {errors.ghanaCardNumber && (
+                      <p className="text-xs text-destructive">{errors.ghanaCardNumber.message}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Format: GHA-XXXXXXXXX-X (e.g., GHA-123456789-0)
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -344,6 +421,12 @@ export default function RegisterPage() {
                       </div>
                     )}
                     <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Ghana Card</span>
+                      <span className="text-sm font-medium text-foreground">
+                        {formValues.ghanaCardNumber}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Email</span>
                       <span className="text-sm font-medium text-foreground">
                         {formValues.email}
@@ -407,10 +490,12 @@ export default function RegisterPage() {
         </Card>
 
         {/* Trust copy */}
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Your data is stored securely and never shared without consent
-        </p>
-      </div>
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            Your data is stored securely and never shared without consent
+          </p>
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 }

@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import {
   Users,
   Search,
@@ -17,6 +16,7 @@ import {
   Mail,
   Phone,
   Calendar,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,12 +26,14 @@ import { EmptyState } from '@/components/feedback/empty-state';
 import { Skeleton } from '@/components/feedback/loading-skeleton';
 import { formatDate } from '@/lib/utils';
 import { AdminLayout } from '../_components/admin-layout';
+import { API_BASE_URL } from '@/lib/api';
 
 interface User {
   id: string;
   email: string;
   phone?: string;
   fullName: string;
+  avatarUrl?: string;
   accountStatus: string;
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -39,55 +41,57 @@ interface User {
   createdAt: string;
 }
 
+interface Pagination {
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [users, setUsers] = useState<User[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, pageSize: 20, total: 0 });
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock data for now - will connect to API
-  const users: User[] = [
-    {
-      id: '1',
-      email: 'john@example.com',
-      phone: '0241234567',
-      fullName: 'John Doe',
-      accountStatus: 'ACTIVE',
-      emailVerified: true,
-      phoneVerified: true,
-      roles: ['seller', 'buyer'],
-      createdAt: '2024-01-15T10:00:00Z',
-    },
-    {
-      id: '2',
-      email: 'jane@example.com',
-      phone: '0209876543',
-      fullName: 'Jane Smith',
-      accountStatus: 'ACTIVE',
-      emailVerified: true,
-      phoneVerified: false,
-      roles: ['buyer'],
-      createdAt: '2024-01-18T14:30:00Z',
-    },
-    {
-      id: '3',
-      email: 'agent@realestate.com',
-      fullName: 'Real Estate Agent',
-      accountStatus: 'PENDING_VERIFICATION',
-      emailVerified: false,
-      phoneVerified: false,
-      roles: ['agent'],
-      createdAt: '2024-01-20T09:15:00Z',
-    },
-  ];
+  useEffect(() => {
+    fetchUsers();
+  }, [page, statusFilter]);
 
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      !search ||
-      user.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      user.email.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = !statusFilter || user.accountStatus === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '20',
+        ...(statusFilter && { status: statusFilter }),
+        ...(search && { search }),
+      });
+
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/users?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setUsers(data.data);
+        setPagination(data.meta.pagination);
+      }
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = () => {
+    setPage(1);
+    fetchUsers();
+  };
+
+  const filteredUsers = users;
 
   return (
     <AdminLayout>
@@ -106,7 +110,7 @@ export default function AdminUsersPage() {
 
         {/* Stats */}
         <div className="grid gap-4 sm:grid-cols-4">
-          <StatCard label="Total Users" value={users.length} />
+          <StatCard label="Total Users" value={pagination.total} />
           <StatCard
             label="Active"
             value={users.filter((u) => u.accountStatus === 'ACTIVE').length}
@@ -130,13 +134,14 @@ export default function AdminUsersPage() {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   placeholder="Search by name or email..."
                   className="pl-10"
                 />
               </div>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                 className="h-10 w-full sm:w-48 rounded-xl border border-input bg-background px-3 text-sm"
               >
                 <option value="">All Statuses</option>
@@ -145,6 +150,9 @@ export default function AdminUsersPage() {
                 <option value="SUSPENDED">Suspended</option>
                 <option value="DEACTIVATED">Deactivated</option>
               </select>
+              <Button variant="secondary" onClick={handleSearch}>
+                Search
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -258,14 +266,26 @@ export default function AdminUsersPage() {
             {/* Pagination */}
             <div className="flex items-center justify-between p-4 border-t border-border">
               <p className="text-sm text-muted-foreground">
-                Showing {filteredUsers.length} of {users.length} users
+                Showing {users.length} of {pagination.total} users
               </p>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" disabled={page === 1}>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  disabled={page === 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span className="text-sm text-muted-foreground">Page {page}</span>
-                <Button variant="ghost" size="sm">
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {Math.ceil(pagination.total / pagination.pageSize) || 1}
+                </span>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  disabled={page >= Math.ceil(pagination.total / pagination.pageSize)}
+                  onClick={() => setPage(p => p + 1)}
+                >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>

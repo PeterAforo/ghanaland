@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/feedback/loading-skeleton';
+import { API_BASE_URL } from '@/lib/api';
 
 interface AdminStats {
   totalUsers: number;
@@ -57,49 +58,40 @@ export default function AdminDashboardPage() {
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
 
   useEffect(() => {
-    // Check auth and admin role
     const token = localStorage.getItem('accessToken');
     if (!token) {
       router.push('/auth/login');
       return;
     }
 
-    // Simulate loading admin data
-    setTimeout(() => {
-      setStats({
-        totalUsers: 1247,
-        totalListings: 856,
-        pendingVerifications: 23,
-        activeTransactions: 45,
-        monthlyRevenue: 125000,
-        revenueChange: 12.5,
-      });
-      setPendingItems([
-        {
-          id: '1',
-          type: 'verification',
-          title: '5 Acres in East Legon',
-          status: 'pending',
-          createdAt: '2024-01-20',
-        },
-        {
-          id: '2',
-          type: 'listing',
-          title: 'Commercial Plot in Tema',
-          status: 'under_review',
-          createdAt: '2024-01-19',
-        },
-        {
-          id: '3',
-          type: 'transaction',
-          title: 'Transaction #TXN-2024-001',
-          status: 'disputed',
-          createdAt: '2024-01-18',
-        },
-      ]);
-      setIsLoading(false);
-    }, 500);
+    fetchAdminData(token);
   }, [router]);
+
+  const fetchAdminData = async (token: string) => {
+    setIsLoading(true);
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      const [statsRes, pendingRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/v1/admin/stats`, { headers }),
+        fetch(`${API_BASE_URL}/api/v1/admin/pending-items`, { headers }),
+      ]);
+
+      const statsData = await statsRes.json();
+      const pendingData = await pendingRes.json();
+
+      if (statsData.success) {
+        setStats(statsData.data);
+      }
+      if (pendingData.success) {
+        setPendingItems(pendingData.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch admin data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');

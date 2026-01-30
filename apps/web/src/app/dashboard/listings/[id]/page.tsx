@@ -22,6 +22,7 @@ import {
   AlertCircle,
   ExternalLink,
   Copy,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -489,6 +490,42 @@ export default function DashboardListingViewPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Media */}
+        {listing.media && listing.media.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                Media ({listing.media.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-3">
+                {listing.media.map((media) => (
+                  <div
+                    key={media.id}
+                    className="aspect-square rounded-lg bg-muted overflow-hidden"
+                  >
+                    {media.type === 'VIDEO' ? (
+                      <video
+                        src={media.url}
+                        controls
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={media.url}
+                        alt="Listing media"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Pricing */}
         <Card className="mb-6">

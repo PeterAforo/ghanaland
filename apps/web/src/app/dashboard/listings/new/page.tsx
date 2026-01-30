@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Stepper } from '@/components/ui/stepper';
 import { Badge } from '@/components/ui/badge';
+import { LocationPicker } from '@/components/ui/location-picker';
 import { useAuth } from '@/lib/auth';
 import {
   GHANA_REGIONS,
@@ -128,6 +129,8 @@ interface UploadedFile {
   type: 'image' | 'video' | 'document';
   url: string;
   size: number;
+  file?: File; // Keep the actual file for upload
+  uploaded?: boolean; // Track if uploaded to server
 }
 
 export default function NewListingPage() {
@@ -151,6 +154,8 @@ export default function NewListingPage() {
   // Media uploads
   const [images, setImages] = useState<UploadedFile[]>([]);
   const [video, setVideo] = useState<UploadedFile | null>(null);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [createdListingId, setCreatedListingId] = useState<string | null>(null);
 
   const {
     register,
@@ -339,6 +344,8 @@ export default function NewListingPage() {
         type: 'image',
         url: URL.createObjectURL(file),
         size: file.size,
+        file: file,
+        uploaded: false,
       };
       setImages((prev) => [...prev, newImage]);
     });
@@ -354,8 +361,60 @@ export default function NewListingPage() {
       type: 'video',
       url: URL.createObjectURL(file),
       size: file.size,
+      file: file,
+      uploaded: false,
     };
     setVideo(newVideo);
+  };
+
+  const uploadMediaToListing = async (listingId: string): Promise<boolean> => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return false;
+
+    const filesToUpload: File[] = [];
+    
+    // Collect all files that need uploading
+    images.forEach((img) => {
+      if (img.file && !img.uploaded) {
+        filesToUpload.push(img.file);
+      }
+    });
+    
+    if (video?.file && !video.uploaded) {
+      filesToUpload.push(video.file);
+    }
+
+    if (filesToUpload.length === 0) return true;
+
+    setIsUploadingMedia(true);
+
+    try {
+      const formData = new FormData();
+      filesToUpload.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      const res = await fetch(`/api/v1/listings/${listingId}/media`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        console.error('Media upload failed:', await res.text());
+        return false;
+      }
+
+      const result = await res.json();
+      return result.success;
+    } catch (err) {
+      console.error('Media upload error:', err);
+      return false;
+    } finally {
+      setIsUploadingMedia(false);
+    }
   };
 
   const removeImage = (id: string) => {
@@ -393,10 +452,9 @@ export default function NewListingPage() {
       const payload = {
         ...cleanData,
         installmentPackages,
-        images: images.map(img => img.url),
-        videoUrl: video?.url,
       };
       
+      // Step 1: Create the listing
       const res = await fetch('/api/v1/listings', {
         method: 'POST',
         headers: {
@@ -429,7 +487,20 @@ export default function NewListingPage() {
         return;
       }
 
-      router.push(`/dashboard/listings?created=${result.data.id}`);
+      const listingId = result.data.id;
+      setCreatedListingId(listingId);
+
+      // Step 2: Upload media files if any
+      const hasMedia = images.length > 0 || video;
+      if (hasMedia) {
+        const mediaUploaded = await uploadMediaToListing(listingId);
+        if (!mediaUploaded) {
+          // Listing created but media failed - still redirect but show warning
+          console.warn('Media upload failed, but listing was created');
+        }
+      }
+
+      router.push(`/dashboard/listings?created=${listingId}`);
     } catch (err) {
       console.error('Submit error:', err);
       setError('An error occurred. Please try again.');
@@ -650,62 +721,22 @@ export default function NewListingPage() {
                     </div>
                   </div>
 
-                  {/* GPS Coordinates */}
-                  <div className="p-4 rounded-xl bg-muted/50 border border-border">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">GPS Coordinates</p>
-                        <p className="text-xs text-muted-foreground">Get your current location or enter manually</p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={getCurrentLocation}
-                        disabled={isGettingLocation}
-                      >
-                        {isGettingLocation ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <Navigation className="h-4 w-4 mr-2" />
-                        )}
-                        Get Current Location
-                      </Button>
-                    </div>
-
-                    {locationError && (
-                      <p className="text-xs text-destructive mb-3">{locationError}</p>
-                    )}
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">Latitude</label>
-                        <Input
-                          {...register('latitude', { valueAsNumber: true })}
-                          type="number"
-                          step="any"
-                          placeholder="e.g., 5.6037"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">Longitude</label>
-                        <Input
-                          {...register('longitude', { valueAsNumber: true })}
-                          type="number"
-                          step="any"
-                          placeholder="e.g., -0.1870"
-                        />
-                      </div>
-                    </div>
-
-                    {formValues.latitude && formValues.longitude && (
-                      <div className="mt-3 p-2 rounded-lg bg-primary/5 border border-primary/20">
-                        <p className="text-xs text-primary flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          Location set: {formValues.latitude.toFixed(6)}, {formValues.longitude.toFixed(6)}
-                        </p>
-                      </div>
-                    )}
+                  {/* GPS Coordinates with Map */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">
+                      Pin Location on Map <span className="text-muted-foreground">(optional but recommended)</span>
+                    </label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Search for a location, use your current position, or click on the map to set the exact location
+                    </p>
+                    <LocationPicker
+                      latitude={formValues.latitude}
+                      longitude={formValues.longitude}
+                      onChange={(coords) => {
+                        setValue('latitude', coords.latitude);
+                        setValue('longitude', coords.longitude);
+                      }}
+                    />
                   </div>
                 </div>
               )}
@@ -1272,11 +1303,11 @@ export default function NewListingPage() {
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 ) : (
-                  <Button type="submit" variant="primary" disabled={isLoading}>
-                    {isLoading ? (
+                  <Button type="submit" variant="primary" disabled={isLoading || isUploadingMedia}>
+                    {isLoading || isUploadingMedia ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating...
+                        {isUploadingMedia ? 'Uploading media...' : 'Creating...'}
                       </>
                     ) : (
                       <>

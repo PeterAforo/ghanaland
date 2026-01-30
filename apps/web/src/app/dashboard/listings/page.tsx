@@ -30,6 +30,12 @@ import { EmptyState } from '@/components/feedback/empty-state';
 import { Skeleton } from '@/components/feedback/loading-skeleton';
 import { formatPrice, formatDate } from '@/lib/utils';
 
+interface ListingMedia {
+  id: string;
+  url: string;
+  type: string;
+}
+
 interface Listing {
   id: string;
   title: string;
@@ -44,6 +50,7 @@ interface Listing {
   verificationStatus: string;
   viewCount: number;
   createdAt: string;
+  media?: ListingMedia[];
 }
 
 export default function UserListingsPage() {
@@ -193,262 +200,207 @@ export default function UserListingsPage() {
     return matchesSearch;
   });
 
-  if (authLoading || (isAuthenticated && isLoading && listings.length === 0)) {
+  if (isLoading && listings.length === 0) {
     return <ListingsPageSkeleton />;
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Sidebar - reuse from dashboard */}
-      <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-card hidden lg:block">
-        <div className="flex h-full flex-col">
-          <div className="flex h-16 items-center border-b border-border px-6">
-            <Link href="/" className="text-xl font-bold text-primary">
-              Ghana Lands
-            </Link>
-          </div>
-          <nav className="flex-1 space-y-1 p-4">
-            <NavItem href="/dashboard" icon={<MapPin />} label="Dashboard" />
-            <NavItem href="/dashboard/listings" icon={<MapPin />} label="My Listings" active />
-            <NavItem href="/dashboard/transactions" icon={<MapPin />} label="Transactions" />
-            <NavItem href="/dashboard/favorites" icon={<MapPin />} label="Favorites" />
-            <NavItem href="/dashboard/settings" icon={<MapPin />} label="Settings" />
-          </nav>
+    <div className="space-y-6">
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <div className="p-4 rounded-xl bg-green-50 border border-green-200 flex items-center gap-2">
+          <CheckCircle className="h-5 w-5 text-green-600" />
+          <p className="text-sm text-green-800">{successMessage}</p>
         </div>
-      </aside>
+      )}
+      {error && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-red-600" />
+          <p className="text-sm text-red-800">{error}</p>
+          <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-auto">
+            Dismiss
+          </Button>
+        </div>
+      )}
 
-      {/* Main Content */}
-      <main className="lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-6">
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">My Listings</h1>
-            <p className="text-sm text-muted-foreground">Manage your land listings</p>
-          </div>
-          <Link href="/dashboard/listings/new">
-            <Button variant="primary" size="sm">
-              <Plus className="mr-2 h-4 w-4" />
-              New Listing
-            </Button>
-          </Link>
-        </header>
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-4">
+        <StatCard label="Total Listings" value={total} />
+        <StatCard
+          label="Published"
+          value={listings.filter((l) => l.listingStatus === 'PUBLISHED').length}
+        />
+        <StatCard
+          label="Drafts"
+          value={listings.filter((l) => l.listingStatus === 'DRAFT').length}
+        />
+        <StatCard
+          label="Total Views"
+          value={listings.reduce((sum, l) => sum + l.viewCount, 0)}
+        />
+      </div>
 
-        <div className="p-6 space-y-6">
-          {/* Success/Error Messages */}
-          {successMessage && (
-            <div className="p-4 rounded-xl bg-green-50 border border-green-200 flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <p className="text-sm text-green-800">{successMessage}</p>
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search your listings..."
+                className="pl-10"
+              />
             </div>
-          )}
-          {error && (
-            <div className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-600" />
-              <p className="text-sm text-red-800">{error}</p>
-              <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-auto">
-                Dismiss
-              </Button>
-            </div>
-          )}
-
-          {/* Stats */}
-          <div className="grid gap-4 sm:grid-cols-4">
-            <StatCard label="Total Listings" value={total} />
-            <StatCard
-              label="Published"
-              value={listings.filter((l) => l.listingStatus === 'PUBLISHED').length}
-            />
-            <StatCard
-              label="Drafts"
-              value={listings.filter((l) => l.listingStatus === 'DRAFT').length}
-            />
-            <StatCard
-              label="Total Views"
-              value={listings.reduce((sum, l) => sum + l.viewCount, 0)}
-            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-10 w-full sm:w-48 rounded-xl border border-input bg-background px-3 text-sm"
+            >
+              <option value="">All Statuses</option>
+              <option value="DRAFT">Draft</option>
+              <option value="SUBMITTED">Submitted</option>
+              <option value="PUBLISHED">Published</option>
+              <option value="SUSPENDED">Suspended</option>
+            </select>
           </div>
+        </CardContent>
+      </Card>
 
-          {/* Filters */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search your listings..."
-                    className="pl-10"
-                  />
-                </div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="h-10 w-full sm:w-48 rounded-xl border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="DRAFT">Draft</option>
-                  <option value="SUBMITTED">Submitted</option>
-                  <option value="PUBLISHED">Published</option>
-                  <option value="SUSPENDED">Suspended</option>
-                </select>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Listings */}
+      {filteredListings.length === 0 ? (
+        <Card>
+          <CardContent className="p-8">
+            <EmptyState
+              icon={<MapPin className="h-6 w-6" />}
+              title="No listings yet"
+              description="Create your first listing to start selling land"
+              action={
+                <Link href="/dashboard/listings/new">
+                  <Button variant="primary">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Listing
+                  </Button>
+                </Link>
+              }
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {filteredListings.map((listing) => (
+            <Card key={listing.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                  {/* Image */}
+                  <div className="w-full lg:w-32 h-24 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {listing.media && listing.media.length > 0 ? (
+                      <img
+                        src={listing.media[0].url}
+                        alt={listing.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <MapPin className="h-8 w-8 text-muted-foreground" />
+                    )}
+                  </div>
 
-          {/* Listings */}
-          {filteredListings.length === 0 ? (
-            <Card>
-              <CardContent className="p-8">
-                <EmptyState
-                  icon={<MapPin className="h-6 w-6" />}
-                  title="No listings yet"
-                  description="Create your first listing to start selling land"
-                  action={
-                    <Link href="/dashboard/listings/new">
-                      <Button variant="primary">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create Listing
-                      </Button>
-                    </Link>
-                  }
-                />
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {filteredListings.map((listing) => (
-                <Card key={listing.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                      {/* Image placeholder */}
-                      <div className="w-full lg:w-32 h-24 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
-                        <MapPin className="h-8 w-8 text-muted-foreground" />
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="font-semibold text-foreground">{listing.title}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {listing.district}, {listing.region}
+                        </p>
                       </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h3 className="font-semibold text-foreground">{listing.title}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {listing.district}, {listing.region}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <ListingStatusBadge status={listing.listingStatus} />
-                            <VerificationBadge status={listing.verificationStatus} />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                          <span>{formatPrice(listing.priceGhs)}</span>
-                          <span>{listing.sizeAcres} acres</span>
-                          <span>{listing.viewCount} views</span>
-                          <span>Listed {formatDate(listing.createdAt)}</span>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
                       <div className="flex items-center gap-2">
-                        {/* Publish/Unpublish Button */}
-                        {listing.listingStatus === 'DRAFT' && (
-                          <Button 
-                            variant="primary" 
-                            size="sm"
-                            onClick={() => handleStatusChange(listing.id, 'PUBLISHED')}
-                          >
-                            <Globe className="h-4 w-4 mr-1" />
-                            Publish
-                          </Button>
-                        )}
-                        {listing.listingStatus === 'PUBLISHED' && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleStatusChange(listing.id, 'DRAFT')}
-                          >
-                            <Archive className="h-4 w-4 mr-1" />
-                            Unpublish
-                          </Button>
-                        )}
-                        {listing.listingStatus === 'SUBMITTED' && (
-                          <Badge variant="pending">Pending Review</Badge>
-                        )}
-                        
-                        <Link href={`/dashboard/listings/${listing.id}`}>
-                          <Button variant="ghost" size="sm">
-                            <Eye className="h-4 w-4 mr-1" />
-                            View
-                          </Button>
-                        </Link>
-                        <Link href={`/dashboard/listings/${listing.id}/edit`}>
-                          <Button variant="ghost" size="sm">
-                            <Edit className="h-4 w-4 mr-1" />
-                            Edit
-                          </Button>
-                        </Link>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-destructive"
-                          onClick={() => handleDelete(listing.id)}
-                          disabled={deleteId === listing.id}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <ListingStatusBadge status={listing.listingStatus} />
+                        <VerificationBadge status={listing.verificationStatus} />
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+                    <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                      <span>{formatPrice(parseFloat(listing.priceGhs))}</span>
+                      <span>{listing.sizeAcres} acres</span>
+                      <span>{listing.viewCount} views</span>
+                      <span>Listed {formatDate(listing.createdAt)}</span>
+                    </div>
+                  </div>
 
-          {/* Pagination */}
-          {filteredListings.length > 0 && (
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Showing {filteredListings.length} of {listings.length} listings
-              </p>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" disabled={page === 1}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm text-muted-foreground">Page {page}</span>
-                <Button variant="ghost" size="sm">
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
+                  {/* Actions */}
+                  <div className="flex items-center gap-2">
+                    {listing.listingStatus === 'DRAFT' && (
+                      <Button 
+                        variant="primary" 
+                        size="sm"
+                        onClick={() => handleStatusChange(listing.id, 'PUBLISHED')}
+                      >
+                        <Globe className="h-4 w-4 mr-1" />
+                        Publish
+                      </Button>
+                    )}
+                    {listing.listingStatus === 'PUBLISHED' && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleStatusChange(listing.id, 'DRAFT')}
+                      >
+                        <Archive className="h-4 w-4 mr-1" />
+                        Unpublish
+                      </Button>
+                    )}
+                    {listing.listingStatus === 'SUBMITTED' && (
+                      <Badge variant="pending">Pending Review</Badge>
+                    )}
+                    
+                    <Link href={`/dashboard/listings/${listing.id}`}>
+                      <Button variant="ghost" size="sm">
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                    </Link>
+                    <Link href={`/dashboard/listings/${listing.id}/edit`}>
+                      <Button variant="ghost" size="sm">
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                    </Link>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => handleDelete(listing.id)}
+                      disabled={deleteId === listing.id}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
-      </main>
-    </div>
-  );
-}
+      )}
 
-function NavItem({
-  href,
-  icon,
-  label,
-  active,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-        active
-          ? 'bg-primary text-primary-foreground'
-          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-      }`}
-    >
-      <span className="h-5 w-5">{icon}</span>
-      {label}
-    </Link>
+      {/* Pagination */}
+      {filteredListings.length > 0 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing {filteredListings.length} of {listings.length} listings
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" disabled={page === 1}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground">Page {page}</span>
+            <Button variant="ghost" size="sm">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -500,23 +452,16 @@ function VerificationBadge({ status }: { status: string }) {
 
 function ListingsPageSkeleton() {
   return (
-    <div className="min-h-screen bg-background">
-      <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-card hidden lg:block">
-        <div className="p-6">
-          <Skeleton className="h-8 w-32" />
-        </div>
-      </aside>
-      <main className="lg:pl-64 p-6">
-        <div className="grid gap-4 sm:grid-cols-4 mb-6">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-20 rounded-2xl" />
-          ))}
-        </div>
-        <Skeleton className="h-14 rounded-2xl mb-6" />
-        {[...Array(3)].map((_, i) => (
-          <Skeleton key={i} className="h-32 rounded-2xl mb-4" />
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <Skeleton key={i} className="h-20 rounded-2xl" />
         ))}
-      </main>
+      </div>
+      <Skeleton className="h-14 rounded-2xl" />
+      {[...Array(3)].map((_, i) => (
+        <Skeleton key={i} className="h-32 rounded-2xl" />
+      ))}
     </div>
   );
 }

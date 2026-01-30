@@ -1,0 +1,103 @@
+{
+  "$schema": "https://ghanalands.dev/schemas/hero.background.spec.schema.json",
+  "name": "hero.background.spec",
+  "version": "1.0.0",
+  "target": {
+    "rootSelector": "[data-hero='root']",
+    "bgImageSelector": "[data-hero='bg-image']",
+    "bgOverlaySelector": "[data-hero='bg-overlay']"
+  },
+  "assets": {
+    "light": {
+      "src": "/images/hero/hero-bg-light.avif",
+      "fallbackSrc": "/images/hero/hero-bg-light.webp",
+      "alt": "",
+      "credit": {
+        "required": false,
+        "text": ""
+      }
+    },
+    "dark": {
+      "src": "/images/hero/hero-bg-dark.avif",
+      "fallbackSrc": "/images/hero/hero-bg-dark.webp",
+      "alt": "",
+      "credit": {
+        "required": false,
+        "text": ""
+      }
+    }
+  },
+  "layout": {
+    "position": "absolute",
+    "inset": 0,
+    "zIndex": 0,
+    "overflow": "hidden"
+  },
+  "imageStyle": {
+    "objectFit": "cover",
+    "objectPosition": {
+      "desktop": "center",
+      "tablet": "center",
+      "mobile": "center top"
+    },
+    "transform": {
+      "baseScale": 1.02,
+      "enterScale": 1.05
+    },
+    "filters": {
+      "light": {
+        "saturate": 0.75,
+        "contrast": 0.92,
+        "brightness": 0.95,
+        "blurPx": 1
+      },
+      "dark": {
+        "saturate": 0.7,
+        "contrast": 0.95,
+        "brightness": 0.75,
+        "blurPx": 1
+      }
+    }
+  },
+  "overlay": {
+    "enabled": true,
+    "type": "gradient",
+    "light": {
+      "gradient": "linear-gradient(to bottom, rgba(255,255,255,0.88), rgba(255,255,255,0.94))",
+      "opacity": 1
+    },
+    "dark": {
+      "gradient": "linear-gradient(to bottom, rgba(6,12,10,0.72), rgba(6,12,10,0.86))",
+      "opacity": 1
+    }
+  },
+  "readabilityGuard": {
+    "enabled": true,
+    "method": "contentBackdrop",
+    "contentBackdropSelector": "[data-hero='content-backdrop']",
+    "light": {
+      "background": "rgba(255,255,255,0.55)",
+      "backdropBlurPx": 6
+    },
+    "dark": {
+      "background": "rgba(0,0,0,0.32)",
+      "backdropBlurPx": 8
+    }
+  },
+  "performance": {
+    "useNextImage": true,
+    "priority": true,
+    "sizes": "(max-width: 767px) 100vw, (max-width: 1023px) 100vw, 100vw",
+    "loading": "eager",
+    "decoding": "async",
+    "fetchPriority": "high"
+  },
+  "motionHooks": {
+    "gsapTargets": {
+      "bgImage": "[data-hero='bg-image']",
+      "bgOverlay": "[data-hero='bg-overlay']"
+    },
+    "allowParallax": true,
+    "parallaxMaxY": 24
+  }
+}

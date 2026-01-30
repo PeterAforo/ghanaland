@@ -1,5 +1,23 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  UseInterceptors,
+  UploadedFile,
+  UploadedFiles,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
+} from '@nestjs/common';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { ListingsService } from './listings.service';
 
@@ -71,5 +89,62 @@ export class ListingsController {
     @Body() dto: { status: string },
   ) {
     return this.listingsService.updateStatus(req.user.id, id, dto.status);
+  }
+
+  @Post(':id/media')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @UseInterceptors(FilesInterceptor('files', 10))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload images/videos to a listing' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+        },
+      },
+    },
+  })
+  async uploadMedia(
+    @Request() req: any,
+    @Param('id') id: string,
+    @UploadedFiles(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 50 * 1024 * 1024 }), // 50MB for videos
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png|gif|webp|mp4|mov|avi)$/i }),
+        ],
+      }),
+    )
+    files: Express.Multer.File[],
+  ) {
+    return this.listingsService.uploadMedia(req.user.id, id, files);
+  }
+
+  @Delete(':id/media/:mediaId')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a media item from listing' })
+  async deleteMedia(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('mediaId') mediaId: string,
+  ) {
+    return this.listingsService.deleteMedia(req.user.id, id, mediaId);
+  }
+
+  @Put(':id/media/reorder')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reorder media items' })
+  async reorderMedia(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: { mediaIds: string[] },
+  ) {
+    return this.listingsService.reorderMedia(req.user.id, id, dto.mediaIds);
   }
 }

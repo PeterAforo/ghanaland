@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CreditCard,
   Search,
@@ -21,85 +21,142 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { AdminLayout } from '../_components/admin-layout';
+import { API_BASE_URL } from '@/lib/api';
 
 interface Transaction {
   id: string;
-  listingTitle: string;
+  listing: { title: string };
   buyer: { fullName: string };
   seller: { fullName: string };
-  agreedPriceGhs: number;
-  platformFeeGhs: number;
+  agreedPriceGhs: string;
+  platformFeeGhs: string;
   status: string;
   escrowStatus?: string;
   createdAt: string;
+}
+
+interface Pagination {
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+interface Stats {
+  totalTransactions: number;
+  totalVolume: string;
+  totalFees: string;
+  disputedCount: number;
 }
 
 export default function AdminTransactionsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, pageSize: 20, total: 0 });
+  const [stats, setStats] = useState<Stats>({ totalTransactions: 0, totalVolume: '0', totalFees: '0', disputedCount: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Mock data
-  const transactions: Transaction[] = [
-    {
-      id: 'TXN-2024-001',
-      listingTitle: '5 Acres Prime Land in East Legon',
-      buyer: { fullName: 'Alice Johnson' },
-      seller: { fullName: 'John Doe' },
-      agreedPriceGhs: 2500000,
-      platformFeeGhs: 125000,
-      status: 'ESCROW_FUNDED',
-      escrowStatus: 'FUNDED',
-      createdAt: '2024-01-20T10:00:00Z',
-    },
-    {
-      id: 'TXN-2024-002',
-      listingTitle: 'Commercial Plot in Tema',
-      buyer: { fullName: 'Bob Williams' },
-      seller: { fullName: 'Jane Smith' },
-      agreedPriceGhs: 5000000,
-      platformFeeGhs: 250000,
-      status: 'VERIFICATION_PERIOD',
-      escrowStatus: 'FUNDED',
-      createdAt: '2024-01-18T14:30:00Z',
-    },
-    {
-      id: 'TXN-2024-003',
-      listingTitle: 'Residential Land in Kumasi',
-      buyer: { fullName: 'Charles Brown' },
-      seller: { fullName: 'Kwame Asante' },
-      agreedPriceGhs: 800000,
-      platformFeeGhs: 40000,
-      status: 'DISPUTED',
-      escrowStatus: 'FUNDED',
-      createdAt: '2024-01-15T09:15:00Z',
-    },
-    {
-      id: 'TXN-2024-004',
-      listingTitle: 'Agricultural Land in Volta',
-      buyer: { fullName: 'Diana Evans' },
-      seller: { fullName: 'Emmanuel Mensah' },
-      agreedPriceGhs: 1200000,
-      platformFeeGhs: 60000,
-      status: 'COMPLETED',
-      escrowStatus: 'RELEASED',
-      createdAt: '2024-01-10T11:00:00Z',
-    },
-  ];
+  useEffect(() => {
+    fetchTransactions();
+  }, [page, statusFilter]);
 
-  const filteredTransactions = transactions.filter((txn) => {
-    const matchesSearch =
-      !search ||
-      txn.id.toLowerCase().includes(search.toLowerCase()) ||
-      txn.listingTitle.toLowerCase().includes(search.toLowerCase()) ||
-      txn.buyer.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      txn.seller.fullName.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = !statusFilter || txn.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const handleReleaseEscrow = async (transactionId: string) => {
+    if (!confirm('Are you sure you want to release the escrow funds to the seller?')) return;
+    
+    setActionLoading(transactionId);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE_URL}/api/v1/escrow/release`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ transactionId }),
+      });
 
-  const totalVolume = transactions.reduce((sum, t) => sum + t.agreedPriceGhs, 0);
-  const totalFees = transactions.reduce((sum, t) => sum + t.platformFeeGhs, 0);
+      const data = await res.json();
+      if (data.success) {
+        alert('Escrow released successfully! Plots have been deducted from the listing.');
+        fetchTransactions();
+      } else {
+        alert(`Failed to release escrow: ${data.error?.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to release escrow:', error);
+      alert('Failed to release escrow. Please try again.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleResolveDispute = async (transactionId: string, resolution: string) => {
+    const notes = prompt('Enter resolution notes (optional):');
+    
+    setActionLoading(transactionId);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE_URL}/api/v1/escrow/resolve-dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ transactionId, resolution, notes }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert('Dispute resolved successfully!');
+        fetchTransactions();
+      } else {
+        alert(`Failed to resolve dispute: ${data.error?.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to resolve dispute:', error);
+      alert('Failed to resolve dispute. Please try again.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '20',
+        ...(statusFilter && { status: statusFilter }),
+      });
+
+      const res = await fetch(`${API_BASE_URL}/api/v1/admin/transactions?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setTransactions(data.data);
+        setPagination(data.meta.pagination);
+        if (data.meta.stats) {
+          setStats(data.meta.stats);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch transactions:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSearch = () => {
+    setPage(1);
+    fetchTransactions();
+  };
+
+  const filteredTransactions = transactions;
 
   return (
     <AdminLayout>
@@ -120,26 +177,26 @@ export default function AdminTransactionsPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardContent className="p-4">
-              <p className="text-2xl font-bold text-foreground">{transactions.length}</p>
+              <p className="text-2xl font-bold text-foreground">{stats.totalTransactions}</p>
               <p className="text-sm text-muted-foreground">Total Transactions</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-2xl font-bold text-foreground">{formatPrice(totalVolume)}</p>
+              <p className="text-2xl font-bold text-foreground">{formatPrice(parseFloat(stats.totalVolume))}</p>
               <p className="text-sm text-muted-foreground">Total Volume</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-2xl font-bold text-primary">{formatPrice(totalFees)}</p>
+              <p className="text-2xl font-bold text-primary">{formatPrice(parseFloat(stats.totalFees))}</p>
               <p className="text-sm text-muted-foreground">Platform Fees</p>
             </CardContent>
           </Card>
           <Card className="border-warning/30">
             <CardContent className="p-4">
               <p className="text-2xl font-bold text-warning">
-                {transactions.filter((t) => t.status === 'DISPUTED').length}
+                {stats.disputedCount}
               </p>
               <p className="text-sm text-muted-foreground">Disputed</p>
             </CardContent>
@@ -210,9 +267,9 @@ export default function AdminTransactionsPage() {
                     <tr key={txn.id} className="border-b border-border hover:bg-muted/50">
                       <td className="p-4">
                         <div>
-                          <p className="font-mono text-sm font-medium text-foreground">{txn.id}</p>
+                          <p className="font-mono text-sm font-medium text-foreground">{txn.id.slice(-8)}</p>
                           <p className="text-sm text-muted-foreground truncate max-w-[200px]">
-                            {txn.listingTitle}
+                            {txn.listing?.title || 'N/A'}
                           </p>
                         </div>
                       </td>
@@ -236,10 +293,10 @@ export default function AdminTransactionsPage() {
                       </td>
                       <td className="p-4">
                         <p className="font-medium text-foreground">
-                          {formatPrice(txn.agreedPriceGhs)}
+                          {formatPrice(parseFloat(txn.agreedPriceGhs))}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Fee: {formatPrice(txn.platformFeeGhs)}
+                          Fee: {formatPrice(parseFloat(txn.platformFeeGhs))}
                         </p>
                       </td>
                       <td className="p-4">
@@ -255,17 +312,34 @@ export default function AdminTransactionsPage() {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="sm">
-                            View
-                          </Button>
                           {txn.status === 'DISPUTED' && (
-                            <Button variant="secondary" size="sm">
-                              Resolve
-                            </Button>
+                            <>
+                              <Button 
+                                variant="primary" 
+                                size="sm"
+                                disabled={actionLoading === txn.id}
+                                onClick={() => handleResolveDispute(txn.id, 'RELEASE_TO_SELLER')}
+                              >
+                                {actionLoading === txn.id ? 'Processing...' : 'Release to Seller'}
+                              </Button>
+                              <Button 
+                                variant="secondary" 
+                                size="sm"
+                                disabled={actionLoading === txn.id}
+                                onClick={() => handleResolveDispute(txn.id, 'REFUND_TO_BUYER')}
+                              >
+                                Refund Buyer
+                              </Button>
+                            </>
                           )}
-                          {txn.status === 'READY_TO_RELEASE' && (
-                            <Button variant="primary" size="sm">
-                              Release
+                          {(txn.status === 'ESCROW_FUNDED' || txn.status === 'READY_TO_RELEASE') && (
+                            <Button 
+                              variant="primary" 
+                              size="sm"
+                              disabled={actionLoading === txn.id}
+                              onClick={() => handleReleaseEscrow(txn.id)}
+                            >
+                              {actionLoading === txn.id ? 'Releasing...' : 'Release Escrow'}
                             </Button>
                           )}
                           <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -292,14 +366,26 @@ export default function AdminTransactionsPage() {
             {/* Pagination */}
             <div className="flex items-center justify-between p-4 border-t border-border">
               <p className="text-sm text-muted-foreground">
-                Showing {filteredTransactions.length} of {transactions.length} transactions
+                Showing {transactions.length} of {pagination.total} transactions
               </p>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" disabled={page === 1}>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  disabled={page === 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span className="text-sm text-muted-foreground">Page {page}</span>
-                <Button variant="ghost" size="sm">
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {Math.ceil(pagination.total / pagination.pageSize) || 1}
+                </span>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  disabled={page >= Math.ceil(pagination.total / pagination.pageSize)}
+                  onClick={() => setPage(p => p + 1)}
+                >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>

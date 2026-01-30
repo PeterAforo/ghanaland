@@ -53,6 +53,8 @@ model User {
   passwordHash   String        @map("password_hash")
   fullName       String        @map("full_name")
   avatarUrl      String?       @map("avatar_url")
+  ghanaCardNumber String       @map("ghana_card_number")
+  ghanaCardVerified Boolean    @default(false) @map("ghana_card_verified")
   accountStatus  AccountStatus @default(ACTIVE) @map("account_status")
   emailVerified  Boolean       @default(false) @map("email_verified")
   phoneVerified  Boolean       @default(false) @map("phone_verified")
@@ -71,6 +73,29 @@ model User {
   verificationRequests VerificationRequest[]
   documents    Document[]
   auditLogs    AuditLog[]    @relation("ActorAuditLogs")
+  favorites    Favorite[]
+  sentInquiries     Inquiry[] @relation("SentInquiries")
+  receivedInquiries Inquiry[] @relation("ReceivedInquiries")
+  notifications     Notification[]
+  professionalProfile ProfessionalProfile?
+  clientRequests    ServiceRequest[] @relation("ClientRequests")
+  professionalReviews ProfessionalReview[]
+  permitApplications PermitApplication[]
+  lands             UserLand[]
+  serviceDocuments  ServiceRequestDocument[]
+  serviceConfirmations ServiceConfirmation[]
+  savedSearches     SavedSearch[]
+  sellerReviews     SellerReview[] @relation("SellerReviews")
+  buyerReviews      SellerReview[] @relation("BuyerReviews")
+  // Pro features relations
+  subscriptions     UserSubscription[]
+  featuredListings  FeaturedListing[]
+  priceAlerts       PriceAlert[]
+  savedSearchAlerts SavedSearchAlert[]
+  dueDiligenceReports DueDiligenceReport[]
+  teamOwned         TeamMember[] @relation("TeamOwner")
+  teamMemberships   TeamMember[] @relation("TeamMember")
+  apiKeys           ApiKey[]
 
   @@index([tenantId])
   @@index([email])
@@ -216,6 +241,17 @@ model Listing {
   transactions Transaction[]
   verificationRequests VerificationRequest[]
   documents    Document[]
+  favorites    Favorite[]
+  inquiries    Inquiry[]
+  serviceRequests ServiceRequest[]
+  permitApplications PermitApplication[]
+  // Pro features relations
+  featuredListings FeaturedListing[]
+  analytics        ListingAnalytics[]
+  priceAlerts      PriceAlert[]
+  dueDiligenceReports DueDiligenceReport[]
+  virtualTour      VirtualTour?
+  leadInquiries    LeadInquiry[]
 
   @@index([tenantId])
   @@index([sellerId])
@@ -335,6 +371,9 @@ model Transaction {
   sellerNetGhs    Decimal           @map("seller_net_ghs") @db.Decimal(15, 2)
   status          TransactionStatus @default(CREATED)
   escrowStatus    EscrowStatus?     @map("escrow_status")
+  paymentType     String?           @map("payment_type") @default("ONE_TIME")
+  plotCount       Int?              @map("plot_count") @default(1)
+  installmentSchedule Json?         @map("installment_schedule")
   completedAt     DateTime?         @map("completed_at")
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
@@ -343,6 +382,8 @@ model Transaction {
   buyer    User      @relation("BuyerTransactions", fields: [buyerId], references: [id])
   seller   User      @relation("SellerTransactions", fields: [sellerId], references: [id])
   payments Payment[]
+  userLand UserLand?
+  sellerReview SellerReview?
 
   @@index([listingId])
   @@index([buyerId])
@@ -469,4 +510,1034 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================================
+// SAVED SEARCHES
+// ============================================================================
+
+model SavedSearch {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  name            String
+  filters         Json     // { query, region, district, category, landType, minPrice, maxPrice, etc. }
+  notifyOnNew     Boolean  @default(true) @map("notify_on_new")
+  lastNotifiedAt  DateTime? @map("last_notified_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alert SavedSearchAlert?
+
+  @@index([userId])
+  @@map("saved_searches")
+}
+
+// ============================================================================
+// SELLER REVIEWS
+// ============================================================================
+
+model SellerReview {
+  id            String   @id @default(cuid())
+  transactionId String   @unique @map("transaction_id")
+  sellerId      String   @map("seller_id")
+  buyerId       String   @map("buyer_id")
+  rating        Int      // 1-5
+  title         String?
+  comment       String?
+  isVerified    Boolean  @default(true) @map("is_verified") // From verified transaction
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  seller      User        @relation("SellerReviews", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer       User        @relation("BuyerReviews", fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId])
+  @@index([buyerId])
+  @@index([rating])
+  @@map("seller_reviews")
+}
+
+// ============================================================================
+// FAVORITES
+// ============================================================================
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  listingId String   @map("listing_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([userId])
+  @@index([listingId])
+  @@map("favorites")
+}
+
+// ============================================================================
+// INQUIRIES
+// ============================================================================
+
+model Inquiry {
+  id        String       @id @default(cuid())
+  listingId String       @map("listing_id")
+  senderId  String       @map("sender_id")
+  sellerId  String       @map("seller_id")
+  message   String
+  status    InquiryStatus @default(PENDING)
+  readAt    DateTime?    @map("read_at")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  sender  User    @relation("SentInquiries", fields: [senderId], references: [id], onDelete: Cascade)
+  seller  User    @relation("ReceivedInquiries", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([senderId])
+  @@index([sellerId])
+  @@index([status])
+  @@map("inquiries")
+}
+
+enum InquiryStatus {
+  PENDING
+  READ
+  REPLIED
+  CLOSED
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id          String             @id @default(cuid())
+  userId      String             @map("user_id")
+  type        NotificationCategory
+  title       String
+  message     String
+  data        Json?              // Additional data (listingId, transactionId, etc.)
+  isRead      Boolean            @default(false) @map("is_read")
+  readAt      DateTime?          @map("read_at")
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+enum NotificationCategory {
+  TRANSACTION
+  PAYMENT
+  VERIFICATION
+  LISTING
+  INQUIRY
+  ESCROW
+  SYSTEM
+}
+
+// ============================================================================
+// PROFESSIONAL SERVICES MARKETPLACE
+// ============================================================================
+
+model ProfessionalProfile {
+  id              String              @id @default(cuid())
+  userId          String              @unique @map("user_id")
+  type            ProfessionalType
+  title           String              // e.g., "Licensed Surveyor", "Real Estate Attorney"
+  bio             String?
+  yearsExperience Int?                @map("years_experience")
+  licenseNumber   String?             @map("license_number")
+  licenseVerified Boolean             @default(false) @map("license_verified")
+  regions         String[]            // Regions they serve
+  languages       String[]            @default(["English"])
+  hourlyRateGhs   Decimal?            @map("hourly_rate_ghs") @db.Decimal(12, 2)
+  fixedRateGhs    Decimal?            @map("fixed_rate_ghs") @db.Decimal(12, 2)
+  rating          Decimal             @default(0) @db.Decimal(2, 1)
+  reviewCount     Int                 @default(0) @map("review_count")
+  isAvailable     Boolean             @default(true) @map("is_available")
+  verifiedAt      DateTime?           @map("verified_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services        ProfessionalService[]
+  serviceRequests ServiceRequest[]    @relation("ProfessionalRequests")
+  reviews         ProfessionalReview[]
+  journeyStages   LandJourneyStageRecord[]
+  leadInquiries   LeadInquiry[]
+
+  @@index([type])
+  @@index([isAvailable])
+  @@index([rating])
+  @@map("professional_profiles")
+}
+
+// Admin-managed service catalog with standardized pricing
+model ServiceCatalog {
+  id              String              @id @default(cuid())
+  professionalType ProfessionalType   @map("professional_type")
+  name            String
+  description     String?
+  priceGhs        Decimal             @map("price_ghs") @db.Decimal(12, 2)
+  durationDays    Int?                @map("duration_days")
+  isActive        Boolean             @default(true) @map("is_active")
+  sortOrder       Int                 @default(0) @map("sort_order")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  professionalServices ProfessionalService[]
+
+  @@unique([professionalType, name])
+  @@index([professionalType])
+  @@index([isActive])
+  @@map("service_catalog")
+}
+
+model ProfessionalService {
+  id            String              @id @default(cuid())
+  profileId     String              @map("profile_id")
+  catalogId     String?             @map("catalog_id")
+  name          String
+  description   String?
+  priceGhs      Decimal             @map("price_ghs") @db.Decimal(12, 2)
+  priceType     PriceType           @default(FIXED) @map("price_type")
+  durationDays  Int?                @map("duration_days")
+  isActive      Boolean             @default(true) @map("is_active")
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  profile       ProfessionalProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  catalog       ServiceCatalog?     @relation(fields: [catalogId], references: [id])
+  requests      ServiceRequest[]
+
+  @@index([profileId])
+  @@index([catalogId])
+  @@map("professional_services")
+}
+
+model ServiceRequest {
+  id              String              @id @default(cuid())
+  clientId        String              @map("client_id")
+  professionalId  String              @map("professional_id")
+  serviceId       String?             @map("service_id")
+  listingId       String?             @map("listing_id")
+  description     String
+  status          ServiceRequestStatus @default(PENDING)
+  
+  // Pricing
+  agreedPriceGhs  Decimal?            @map("agreed_price_ghs") @db.Decimal(12, 2)
+  platformFeeGhs  Decimal?            @map("platform_fee_ghs") @db.Decimal(12, 2)
+  professionalNetGhs Decimal?         @map("professional_net_ghs") @db.Decimal(12, 2)
+  
+  // Payment/Escrow
+  paymentStatus   ServicePaymentStatus @default(UNPAID) @map("payment_status")
+  escrowFundedAt  DateTime?           @map("escrow_funded_at")
+  escrowReleasedAt DateTime?          @map("escrow_released_at")
+  paymentReference String?            @map("payment_reference")
+  
+  // Timeline
+  startedAt       DateTime?           @map("started_at")
+  completedAt     DateTime?           @map("completed_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Confirmations tracking
+  clientConfirmedWork     Boolean   @default(false) @map("client_confirmed_work")
+  professionalConfirmedWork Boolean @default(false) @map("professional_confirmed_work")
+  
+  client          User                @relation("ClientRequests", fields: [clientId], references: [id], onDelete: Cascade)
+  professional    ProfessionalProfile @relation("ProfessionalRequests", fields: [professionalId], references: [id], onDelete: Cascade)
+  service         ProfessionalService? @relation(fields: [serviceId], references: [id])
+  listing         Listing?            @relation(fields: [listingId], references: [id])
+  milestones      ServiceMilestone[]
+  documents       ServiceRequestDocument[]
+  confirmations   ServiceConfirmation[]
+  review          ProfessionalReview?
+  journeyStages   LandJourneyStageRecord[]
+
+  @@index([clientId])
+  @@index([professionalId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@map("service_requests")
+}
+
+model ServiceMilestone {
+  id          String            @id @default(cuid())
+  requestId   String            @map("request_id")
+  title       String
+  description String?
+  dueDate     DateTime?         @map("due_date")
+  status      MilestoneStatus   @default(PENDING)
+  completedAt DateTime?         @map("completed_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  request     ServiceRequest    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("service_milestones")
+}
+
+// Documents exchanged during service request (input docs from client, deliverables from professional)
+model ServiceRequestDocument {
+  id          String                    @id @default(cuid())
+  requestId   String                    @map("request_id")
+  uploadedById String                   @map("uploaded_by_id")
+  type        ServiceDocumentType
+  category    ServiceDocumentCategory
+  name        String
+  description String?
+  fileUrl     String                    @map("file_url")
+  fileSize    Int?                      @map("file_size")
+  mimeType    String?                   @map("mime_type")
+  isRequired  Boolean                   @default(false) @map("is_required")
+  uploadedAt  DateTime                  @default(now()) @map("uploaded_at")
+
+  request     ServiceRequest            @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  uploadedBy  User                      @relation(fields: [uploadedById], references: [id])
+
+  @@index([requestId])
+  @@index([uploadedById])
+  @@map("service_request_documents")
+}
+
+// Confirmation records for service completion
+model ServiceConfirmation {
+  id          String                    @id @default(cuid())
+  requestId   String                    @map("request_id")
+  userId      String                    @map("user_id")
+  role        ConfirmationRole
+  type        ConfirmationType
+  confirmed   Boolean                   @default(false)
+  notes       String?
+  confirmedAt DateTime?                 @map("confirmed_at")
+  createdAt   DateTime                  @default(now()) @map("created_at")
+
+  request     ServiceRequest            @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user        User                      @relation(fields: [userId], references: [id])
+
+  @@unique([requestId, userId, type])
+  @@index([requestId])
+  @@map("service_confirmations")
+}
+
+enum ServiceDocumentType {
+  INPUT           // Documents provided by client for the service
+  DELIVERABLE     // Documents delivered by professional as work output
+  REFERENCE       // Reference documents (either party)
+  CONTRACT        // Service agreement/contract
+}
+
+enum ServiceDocumentCategory {
+  // Client Input Documents
+  LAND_TITLE
+  SITE_PLAN
+  INDENTURE
+  ID_DOCUMENT
+  PROOF_OF_OWNERSHIP
+  SURVEY_REPORT
+  VALUATION_REPORT
+  ARCHITECTURAL_DRAWING
+  BUILDING_PERMIT
+  OTHER_INPUT
+  
+  // Professional Deliverables
+  SURVEY_PLAN
+  LEGAL_OPINION
+  DRAFT_INDENTURE
+  FINAL_INDENTURE
+  ARCHITECTURAL_DESIGN
+  STRUCTURAL_DESIGN
+  VALUATION_CERTIFICATE
+  PERMIT_APPLICATION
+  INSPECTION_REPORT
+  OTHER_DELIVERABLE
+}
+
+enum ConfirmationRole {
+  CLIENT
+  PROFESSIONAL
+  ADMIN
+}
+
+enum ConfirmationType {
+  DOCUMENTS_RECEIVED    // Professional confirms they received client's input docs
+  WORK_STARTED          // Professional confirms work has started
+  DELIVERABLES_UPLOADED // Professional confirms all deliverables uploaded
+  WORK_ACCEPTED         // Client confirms work is satisfactory
+  PAYMENT_RELEASED      // Legacy - not used
+  ESCROW_RELEASED       // Admin confirms escrow can be released after checklist
+}
+
+model ProfessionalReview {
+  id            String              @id @default(cuid())
+  requestId     String              @unique @map("request_id")
+  profileId     String              @map("profile_id")
+  reviewerId    String              @map("reviewer_id")
+  rating        Int                 // 1-5
+  comment       String?
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  request       ServiceRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  profile       ProfessionalProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  reviewer      User                @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("professional_reviews")
+}
+
+enum ProfessionalType {
+  AGENT
+  SURVEYOR
+  ARCHITECT
+  LAWYER
+  ENGINEER
+  VALUER
+  PLANNER
+}
+
+enum PriceType {
+  FIXED
+  HOURLY
+  NEGOTIABLE
+}
+
+enum ServiceRequestStatus {
+  PENDING           // Client submitted request
+  ACCEPTED          // Professional accepted, awaiting payment
+  ESCROW_FUNDED     // Client paid, funds in escrow
+  IN_PROGRESS       // Work started
+  DELIVERED         // Professional marked as delivered
+  COMPLETED         // Client confirmed, escrow released
+  CANCELLED         // Cancelled by either party
+  DISPUTED          // Under dispute
+}
+
+enum ServicePaymentStatus {
+  UNPAID
+  ESCROW_PENDING
+  ESCROW_FUNDED
+  RELEASED
+  REFUNDED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+// ============================================================================
+// PERMIT PROCESSING SYSTEM
+// ============================================================================
+
+model PermitApplication {
+  id              String            @id @default(cuid())
+  applicantId     String            @map("applicant_id")
+  listingId       String?           @map("listing_id")
+  type            PermitType
+  status          PermitStatus      @default(DRAFT)
+  referenceNumber String?           @unique @map("reference_number")
+  
+  // Property Details
+  propertyAddress String            @map("property_address")
+  propertyRegion  String            @map("property_region")
+  propertyDistrict String           @map("property_district")
+  plotNumber      String?           @map("plot_number")
+  landSize        Decimal?          @map("land_size") @db.Decimal(12, 4)
+  landSizeUnit    String?           @default("acres") @map("land_size_unit")
+  
+  // Project Details (for building permits)
+  projectDescription String?        @map("project_description")
+  buildingType    String?           @map("building_type")
+  numberOfFloors  Int?              @map("number_of_floors")
+  estimatedCost   Decimal?          @map("estimated_cost") @db.Decimal(14, 2)
+  
+  // Fees
+  applicationFee  Decimal?          @map("application_fee") @db.Decimal(12, 2)
+  feePaid         Boolean           @default(false) @map("fee_paid")
+  feePaidAt       DateTime?         @map("fee_paid_at")
+  
+  // Timeline
+  submittedAt     DateTime?         @map("submitted_at")
+  reviewStartedAt DateTime?         @map("review_started_at")
+  approvedAt      DateTime?         @map("approved_at")
+  rejectedAt      DateTime?         @map("rejected_at")
+  expiresAt       DateTime?         @map("expires_at")
+  
+  // Notes
+  adminNotes      String?           @map("admin_notes")
+  rejectionReason String?           @map("rejection_reason")
+  
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  applicant       User              @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  listing         Listing?          @relation(fields: [listingId], references: [id])
+  documents       PermitDocument[]
+  statusHistory   PermitStatusHistory[]
+
+  @@index([applicantId])
+  @@index([status])
+  @@index([type])
+  @@index([referenceNumber])
+  @@map("permit_applications")
+}
+
+model PermitDocument {
+  id            String            @id @default(cuid())
+  applicationId String            @map("application_id")
+  type          PermitDocumentType
+  name          String
+  url           String
+  uploadedAt    DateTime          @default(now()) @map("uploaded_at")
+  verified      Boolean           @default(false)
+  verifiedAt    DateTime?         @map("verified_at")
+  verifiedBy    String?           @map("verified_by")
+  notes         String?
+
+  application   PermitApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("permit_documents")
+}
+
+model PermitStatusHistory {
+  id            String            @id @default(cuid())
+  applicationId String            @map("application_id")
+  fromStatus    PermitStatus?     @map("from_status")
+  toStatus      PermitStatus      @map("to_status")
+  changedBy     String?           @map("changed_by")
+  notes         String?
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  application   PermitApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("permit_status_history")
+}
+
+enum PermitType {
+  BUILDING_PERMIT
+  LAND_USE_PERMIT
+  DEVELOPMENT_PERMIT
+  SUBDIVISION_PERMIT
+  OCCUPANCY_PERMIT
+  DEMOLITION_PERMIT
+  RENOVATION_PERMIT
+}
+
+enum PermitStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  ADDITIONAL_INFO_REQUIRED
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum PermitDocumentType {
+  SITE_PLAN
+  ARCHITECTURAL_DRAWING
+  STRUCTURAL_DRAWING
+  LAND_TITLE
+  SURVEY_PLAN
+  TAX_CLEARANCE
+  ENVIRONMENTAL_ASSESSMENT
+  ID_DOCUMENT
+  PROOF_OF_OWNERSHIP
+  OTHER
+}
+
+// ============================================================================
+// LAND JOURNEY - From Purchase to Building Permit
+// ============================================================================
+
+// User's land portfolio - lands they own (purchased on platform or added manually)
+model UserLand {
+  id              String          @id @default(cuid())
+  userId          String          @map("user_id")
+  transactionId   String?         @unique @map("transaction_id") // If purchased on platform
+  
+  // Land Details
+  title           String          // e.g., "My Residential Plot at East Legon"
+  description     String?
+  region          String
+  district        String
+  locality        String
+  plotNumber      String?         @map("plot_number")
+  landSize        Decimal?        @map("land_size") @db.Decimal(12, 2)
+  landSizeUnit    String?         @default("acres") @map("land_size_unit")
+  gpsAddress      String?         @map("gps_address")
+  coordinates     Json?           // { lat, lng }
+  
+  // Purchase Info
+  purchaseDate    DateTime?       @map("purchase_date")
+  purchasePrice   Decimal?        @map("purchase_price") @db.Decimal(15, 2)
+  sellerName      String?         @map("seller_name")
+  sellerContact   String?         @map("seller_contact")
+  
+  // Current Journey Stage
+  currentStage    LandJourneyStage @default(LAND_ACQUIRED) @map("current_stage")
+  journeyStartedAt DateTime       @default(now()) @map("journey_started_at")
+  journeyCompletedAt DateTime?    @map("journey_completed_at")
+  
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction     Transaction?    @relation(fields: [transactionId], references: [id])
+  stages          LandJourneyStageRecord[]
+  documents       LandDocument[]
+  dueDiligenceReports DueDiligenceReport[]
+
+  @@index([userId])
+  @@index([currentStage])
+  @@map("user_lands")
+}
+
+// Records progress through each stage of the land journey
+model LandJourneyStageRecord {
+  id              String              @id @default(cuid())
+  landId          String              @map("land_id")
+  stage           LandJourneyStage
+  status          JourneyStageStatus  @default(NOT_STARTED)
+  
+  // Professional engagement for this stage
+  serviceRequestId String?            @map("service_request_id")
+  professionalId  String?             @map("professional_id")
+  
+  // Stage-specific data
+  notes           String?
+  completedAt     DateTime?           @map("completed_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  land            UserLand            @relation(fields: [landId], references: [id], onDelete: Cascade)
+  serviceRequest  ServiceRequest?     @relation(fields: [serviceRequestId], references: [id])
+  professional    ProfessionalProfile? @relation(fields: [professionalId], references: [id])
+
+  @@unique([landId, stage])
+  @@index([landId])
+  @@index([status])
+  @@map("land_journey_stages")
+}
+
+// Documents uploaded for land journey
+model LandDocument {
+  id              String              @id @default(cuid())
+  landId          String              @map("land_id")
+  stage           LandJourneyStage
+  documentType    LandDocumentType    @map("document_type")
+  name            String
+  fileUrl         String              @map("file_url")
+  fileSize        Int?                @map("file_size")
+  mimeType        String?             @map("mime_type")
+  isVerified      Boolean             @default(false) @map("is_verified")
+  verifiedAt      DateTime?           @map("verified_at")
+  verifiedBy      String?             @map("verified_by")
+  notes           String?
+  uploadedAt      DateTime            @default(now()) @map("uploaded_at")
+
+  land            UserLand            @relation(fields: [landId], references: [id], onDelete: Cascade)
+
+  @@index([landId])
+  @@index([stage])
+  @@map("land_documents")
+}
+
+// The stages of the land journey from purchase to building permit
+enum LandJourneyStage {
+  // Stage 1: Land Acquisition
+  LAND_ACQUIRED           // User has purchased/owns the land
+  
+  // Stage 2: Land Documentation & Verification
+  LAND_SEARCH             // Conduct search at Lands Commission
+  SURVEY_SITE_PLAN        // Get surveyor to verify boundaries & create site plan
+  INDENTURE_PREPARATION   // Prepare/verify indenture document
+  
+  // Stage 3: Land Registration
+  STAMP_DUTY              // Pay stamp duty at Lands Commission
+  LAND_VALUATION          // Get land valued
+  TITLE_REGISTRATION      // Submit for title registration
+  TITLE_CERTIFICATE       // Receive land title certificate
+  
+  // Stage 4: Building Preparation
+  ARCHITECTURAL_DESIGN    // Hire architect for building plans
+  STRUCTURAL_DESIGN       // Hire engineer for structural plans
+  
+  // Stage 5: Permit Application
+  DEVELOPMENT_PERMIT      // Apply for development permit (if needed)
+  BUILDING_PERMIT_APPLICATION // Submit building permit application
+  SITE_INSPECTION         // Assembly site inspection
+  TECHNICAL_REVIEW        // Technical committee review
+  BUILDING_PERMIT_ISSUED  // Building permit approved and issued
+  
+  // Complete
+  READY_TO_BUILD          // All permits obtained, ready to start construction
+}
+
+enum JourneyStageStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PENDING_PROFESSIONAL    // Waiting for professional to complete
+  PENDING_DOCUMENTS       // Waiting for documents
+  PENDING_APPROVAL        // Waiting for government approval
+  COMPLETED
+  SKIPPED                 // Stage not applicable
+}
+
+enum LandDocumentType {
+  // Land Acquisition
+  SALE_AGREEMENT
+  PAYMENT_RECEIPT
+  
+  // Land Search & Survey
+  LAND_SEARCH_REPORT
+  SITE_PLAN
+  SURVEY_REPORT
+  
+  // Indenture & Registration
+  INDENTURE
+  CERTIFIED_INDENTURE
+  STAMP_DUTY_RECEIPT
+  VALUATION_REPORT
+  TITLE_CERTIFICATE
+  
+  // Building Design
+  ARCHITECTURAL_DRAWINGS
+  STRUCTURAL_DRAWINGS
+  ELECTRICAL_DRAWINGS
+  PLUMBING_DRAWINGS
+  
+  // Permits
+  DEVELOPMENT_PERMIT
+  BUILDING_PERMIT
+  EPA_PERMIT
+  FIRE_CERTIFICATE
+  
+  // Identity
+  NATIONAL_ID
+  PASSPORT
+  
+  OTHER
+}
+
+// ============================================================================
+// SUBSCRIPTIONS & PRO FEATURES
+// ============================================================================
+
+model SubscriptionPlan {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  slug            String   @unique
+  description     String?
+  tierType        TierType @map("tier_type")
+  priceMonthlyGhs Decimal  @map("price_monthly_ghs") @db.Decimal(10, 2)
+  priceYearlyGhs  Decimal  @map("price_yearly_ghs") @db.Decimal(10, 2)
+  features        Json     // Array of feature keys
+  limits          Json     // { maxListings, maxTeamMembers, etc. }
+  isActive        Boolean  @default(true) @map("is_active")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  subscriptions UserSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model UserSubscription {
+  id              String             @id @default(cuid())
+  userId          String             @map("user_id")
+  planId          String             @map("plan_id")
+  status          SubscriptionStatus @default(ACTIVE)
+  billingCycle    BillingCycle       @default(MONTHLY) @map("billing_cycle")
+  currentPeriodStart DateTime        @map("current_period_start")
+  currentPeriodEnd   DateTime        @map("current_period_end")
+  cancelAtPeriodEnd  Boolean         @default(false) @map("cancel_at_period_end")
+  paymentReference   String?         @map("payment_reference")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@unique([userId, planId])
+  @@index([userId])
+  @@index([status])
+  @@map("user_subscriptions")
+}
+
+model FeaturedListing {
+  id          String   @id @default(cuid())
+  listingId   String   @map("listing_id")
+  userId      String   @map("user_id")
+  featuredType FeaturedType @default(STANDARD) @map("featured_type")
+  startDate   DateTime @map("start_date")
+  endDate     DateTime @map("end_date")
+  amountPaidGhs Decimal @map("amount_paid_ghs") @db.Decimal(10, 2)
+  paymentReference String? @map("payment_reference")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([userId])
+  @@index([endDate])
+  @@map("featured_listings")
+}
+
+model ListingAnalytics {
+  id          String   @id @default(cuid())
+  listingId   String   @map("listing_id")
+  date        DateTime @db.Date
+  views       Int      @default(0)
+  uniqueViews Int      @default(0) @map("unique_views")
+  inquiries   Int      @default(0)
+  favorites   Int      @default(0)
+  shares      Int      @default(0)
+  phoneClicks Int      @default(0) @map("phone_clicks")
+  mapViews    Int      @default(0) @map("map_views")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, date])
+  @@index([listingId])
+  @@index([date])
+  @@map("listing_analytics")
+}
+
+model PriceAlert {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  listingId   String   @map("listing_id")
+  targetPrice Decimal  @map("target_price") @db.Decimal(15, 2)
+  alertType   PriceAlertType @default(PRICE_DROP) @map("alert_type")
+  isActive    Boolean  @default(true) @map("is_active")
+  lastTriggered DateTime? @map("last_triggered")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId, alertType])
+  @@index([userId])
+  @@index([listingId])
+  @@map("price_alerts")
+}
+
+model SavedSearchAlert {
+  id              String   @id @default(cuid())
+  savedSearchId   String   @map("saved_search_id")
+  userId          String   @map("user_id")
+  frequency       AlertFrequency @default(INSTANT)
+  isActive        Boolean  @default(true) @map("is_active")
+  lastSentAt      DateTime? @map("last_sent_at")
+  matchCount      Int      @default(0) @map("match_count")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  savedSearch SavedSearch @relation(fields: [savedSearchId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([savedSearchId])
+  @@index([userId])
+  @@map("saved_search_alerts")
+}
+
+model DueDiligenceReport {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  listingId   String?  @map("listing_id")
+  landId      String?  @map("land_id")
+  reportType  DueDiligenceType @default(BASIC) @map("report_type")
+  status      ReportStatus @default(PENDING)
+  reportData  Json?    @map("report_data")
+  pdfUrl      String?  @map("pdf_url")
+  amountPaidGhs Decimal? @map("amount_paid_ghs") @db.Decimal(10, 2)
+  paymentReference String? @map("payment_reference")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing? @relation(fields: [listingId], references: [id])
+  land    UserLand? @relation(fields: [landId], references: [id])
+
+  @@index([userId])
+  @@index([listingId])
+  @@map("due_diligence_reports")
+}
+
+model VirtualTour {
+  id          String   @id @default(cuid())
+  listingId   String   @unique @map("listing_id")
+  tourType    VirtualTourType @default(PHOTOS_360) @map("tour_type")
+  tourUrl     String?  @map("tour_url")
+  embedCode   String?  @map("embed_code")
+  mediaUrls   Json?    @map("media_urls") // Array of 360 photo URLs
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("virtual_tours")
+}
+
+model TeamMember {
+  id          String   @id @default(cuid())
+  ownerId     String   @map("owner_id")
+  memberId    String   @map("member_id")
+  role        TeamRole @default(MEMBER)
+  permissions Json?    // Specific permissions override
+  invitedAt   DateTime @default(now()) @map("invited_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  isActive    Boolean  @default(true) @map("is_active")
+
+  owner  User @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  member User @relation("TeamMember", fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, memberId])
+  @@index([ownerId])
+  @@index([memberId])
+  @@map("team_members")
+}
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  name        String
+  keyHash     String   @unique @map("key_hash")
+  keyPrefix   String   @map("key_prefix") // First 8 chars for display
+  permissions Json     // Array of allowed endpoints/actions
+  rateLimit   Int      @default(1000) @map("rate_limit") // Requests per hour
+  lastUsedAt  DateTime? @map("last_used_at")
+  expiresAt   DateTime? @map("expires_at")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+model LeadInquiry {
+  id              String   @id @default(cuid())
+  professionalId  String   @map("professional_id")
+  inquiryType     LeadType @map("inquiry_type")
+  sourceListingId String?  @map("source_listing_id")
+  contactName     String   @map("contact_name")
+  contactEmail    String?  @map("contact_email")
+  contactPhone    String?  @map("contact_phone")
+  message         String?
+  status          LeadStatus @default(NEW)
+  notes           String?
+  convertedAt     DateTime? @map("converted_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  sourceListing Listing? @relation(fields: [sourceListingId], references: [id])
+
+  @@index([professionalId])
+  @@index([status])
+  @@map("lead_inquiries")
+}
+
+// Enums for Pro Features
+enum TierType {
+  FREE
+  SELLER_PRO
+  BUYER_PRO
+  AGENT_PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+  TRIALING
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum FeaturedType {
+  STANDARD    // 7 days
+  PREMIUM     // 14 days + highlighted
+  SPOTLIGHT   // 30 days + top placement
+}
+
+enum PriceAlertType {
+  PRICE_DROP
+  PRICE_CHANGE
+  BACK_ON_MARKET
+}
+
+enum AlertFrequency {
+  INSTANT
+  DAILY
+  WEEKLY
+}
+
+enum DueDiligenceType {
+  BASIC       // Title search only
+  STANDARD    // Title + encumbrance check
+  COMPREHENSIVE // Full history + site visit
+}
+
+enum ReportStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum VirtualTourType {
+  PHOTOS_360
+  VIDEO_WALKTHROUGH
+  MATTERPORT
+  EXTERNAL_LINK
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum LeadType {
+  BUYER_INQUIRY
+  SELLER_INQUIRY
+  SERVICE_REQUEST
+  GENERAL
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
 }

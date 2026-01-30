@@ -2,8 +2,10 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth';
+import { API_BASE_URL } from '@/lib/api';
 import {
   ArrowLeft,
   MapPin,
@@ -29,6 +31,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/feedback/empty-state';
 import { Skeleton } from '@/components/feedback/loading-skeleton';
+import { FavoriteButton } from '@/components/ui/favorite-button';
+import { ListingMap } from '@/components/ui/listing-map';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { Header } from '@/components/layout/header';
 
@@ -83,11 +87,20 @@ interface ListingDetail {
 export default function ListingDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const router = useRouter();
+  const { user, isAuthenticated } = useAuth();
   
   // Buyer state
   const [selectedPlots, setSelectedPlots] = useState(1);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [paymentType, setPaymentType] = useState<'ONE_TIME' | 'INSTALLMENT'>('ONE_TIME');
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [inquiryMessage, setInquiryMessage] = useState('');
+  const [isSendingInquiry, setIsSendingInquiry] = useState(false);
+  const [inquirySuccess, setInquirySuccess] = useState(false);
 
   const { data: listing, isLoading, isError } = useQuery({
     queryKey: ['listing', id],
@@ -161,6 +174,87 @@ export default function ListingDetailPage() {
     };
   }, [listing, selectedPlots, paymentType, selectedPackageId]);
 
+  // Handle purchase initiation
+  const handlePurchase = async () => {
+    if (!isAuthenticated) {
+      // Redirect to login with return URL
+      router.push(`/auth/login?redirect=/listings/${id}`);
+      return;
+    }
+
+    if (!listing || !buyerCalculation) return;
+
+    // Check if user is trying to buy their own listing
+    if (listing.seller?.id === user?.id) {
+      setPurchaseError("You cannot purchase your own listing");
+      return;
+    }
+
+    setIsPurchasing(true);
+    setPurchaseError(null);
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      
+      // Step 1: Create transaction via escrow
+      const transactionRes = await fetch(`${API_BASE_URL}/api/v1/escrow/transaction`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          listingId: listing.id,
+          plotCount: selectedPlots,
+          paymentType: paymentType,
+          installmentPackageId: paymentType === 'INSTALLMENT' ? selectedPackageId : undefined,
+        }),
+      });
+
+      const transactionResult = await transactionRes.json();
+      
+      if (!transactionResult.success) {
+        throw new Error(transactionResult.error?.message || 'Failed to create transaction');
+      }
+
+      const transaction = transactionResult.data;
+
+      // Step 2: Initiate payment via Hubtel
+      const paymentRes = await fetch(`${API_BASE_URL}/api/v1/payments/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          transactionId: transaction.id,
+          amount: buyerCalculation.initialPayment,
+          paymentType: paymentType === 'ONE_TIME' ? 'FULL' : 'DEPOSIT',
+          returnUrl: `${window.location.origin}/dashboard/transactions/${transaction.id}`,
+        }),
+      });
+
+      const paymentResult = await paymentRes.json();
+
+      if (!paymentResult.success) {
+        throw new Error(paymentResult.error?.message || 'Failed to initiate payment');
+      }
+
+      // Redirect to Hubtel checkout
+      if (paymentResult.data?.checkoutUrl) {
+        window.location.href = paymentResult.data.checkoutUrl;
+      } else {
+        // Fallback: redirect to transaction page
+        router.push(`/dashboard/transactions/${transaction.id}`);
+      }
+    } catch (err: any) {
+      console.error('Purchase error:', err);
+      setPurchaseError(err.message || 'Failed to process purchase. Please try again.');
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
   if (isLoading) {
     return <ListingDetailSkeleton />;
   }
@@ -218,10 +312,43 @@ export default function ListingDetailPage() {
           <div className="lg:col-span-2 space-y-6">
             {/* Image Gallery */}
             <div className="aspect-[16/9] rounded-2xl bg-muted overflow-hidden">
-              <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                <MapPin className="h-16 w-16 text-primary/40" />
-              </div>
+              {listing.media && listing.media.length > 0 ? (
+                <img
+                  src={listing.media[0].url}
+                  alt={listing.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <MapPin className="h-16 w-16 text-primary/40" />
+                </div>
+              )}
             </div>
+            
+            {/* Thumbnail Gallery */}
+            {listing.media && listing.media.length > 1 && (
+              <div className="grid grid-cols-4 gap-2">
+                {listing.media.slice(0, 4).map((media, index) => (
+                  <div
+                    key={media.id}
+                    className="aspect-square rounded-lg bg-muted overflow-hidden"
+                  >
+                    {media.type === 'VIDEO' ? (
+                      <video
+                        src={media.url}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={media.url}
+                        alt={`${listing.title} ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Title & Location */}
             <div>
@@ -235,12 +362,57 @@ export default function ListingDetailPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" className="h-10 w-10">
-                    <Heart className="h-5 w-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-10 w-10">
-                    <Share2 className="h-5 w-5" />
-                  </Button>
+                  <FavoriteButton listingId={listing.id} size="lg" />
+                  <div className="relative">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-10 w-10"
+                      onClick={() => setShowShareMenu(!showShareMenu)}
+                    >
+                      <Share2 className="h-5 w-5" />
+                    </Button>
+                    {showShareMenu && (
+                      <div className="absolute right-0 top-12 w-48 bg-card border border-border rounded-xl shadow-lg z-50 p-2">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(window.location.href);
+                            setShowShareMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted"
+                        >
+                          Copy Link
+                        </button>
+                        <button
+                          onClick={() => {
+                            window.open(`https://wa.me/?text=${encodeURIComponent(listing.title + ' - ' + window.location.href)}`, '_blank');
+                            setShowShareMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted"
+                        >
+                          Share on WhatsApp
+                        </button>
+                        <button
+                          onClick={() => {
+                            window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(listing.title)}&url=${encodeURIComponent(window.location.href)}`, '_blank');
+                            setShowShareMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted"
+                        >
+                          Share on Twitter
+                        </button>
+                        <button
+                          onClick={() => {
+                            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`, '_blank');
+                            setShowShareMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted"
+                        >
+                          Share on Facebook
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -340,6 +512,35 @@ export default function ListingDetailPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Location Map */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Location
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ListingMap
+                  latitude={listing.latitude}
+                  longitude={listing.longitude}
+                  title={listing.title}
+                  address={`${listing.town ? listing.town + ', ' : ''}${listing.district}, ${listing.region}`}
+                  className="h-[300px]"
+                />
+                <div className="mt-3 text-sm text-muted-foreground">
+                  <p className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {listing.town && `${listing.town}, `}
+                    {listing.district}, {listing.region}
+                  </p>
+                  {listing.address && (
+                    <p className="mt-1">{listing.address}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Sidebar - Buyer Calculator */}
@@ -551,14 +752,48 @@ export default function ListingDetailPage() {
                   </div>
                 )}
 
+                {/* Purchase Error */}
+                {purchaseError && (
+                  <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 mb-4">
+                    <p className="text-sm text-destructive">{purchaseError}</p>
+                  </div>
+                )}
+
                 <div className="space-y-3">
-                  <Button variant="primary" className="w-full">
-                    {paymentType === 'ONE_TIME' 
-                      ? `Buy Now - ${formatPrice(buyerCalculation?.initialPayment || 0)}`
-                      : `Start Purchase - ${formatPrice(buyerCalculation?.initialPayment || 0)} deposit`
-                    }
+                  <Button 
+                    variant="primary" 
+                    className="w-full"
+                    onClick={handlePurchase}
+                    disabled={isPurchasing || listing.seller?.id === user?.id}
+                  >
+                    {isPurchasing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : listing.seller?.id === user?.id ? (
+                      'This is your listing'
+                    ) : !isAuthenticated ? (
+                      'Login to Purchase'
+                    ) : paymentType === 'ONE_TIME' ? (
+                      `Buy Now - ${formatPrice(buyerCalculation?.initialPayment || 0)}`
+                    ) : (
+                      `Start Purchase - ${formatPrice(buyerCalculation?.initialPayment || 0)} deposit`
+                    )}
                   </Button>
-                  <Button variant="secondary" className="w-full">
+                  <Button 
+                    variant="secondary" 
+                    className="w-full"
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        router.push(`/auth/login?redirect=/listings/${id}`);
+                        return;
+                      }
+                      setShowContactModal(true);
+                    }}
+                    disabled={listing.seller?.id === user?.id}
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
                     Contact Seller
                   </Button>
                 </div>
@@ -604,6 +839,153 @@ export default function ListingDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Contact Seller Modal */}
+      {showContactModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/50" 
+            onClick={() => setShowContactModal(false)} 
+          />
+          <div className="relative bg-card rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+            <button
+              onClick={() => setShowContactModal(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+            >
+              ✕
+            </button>
+            
+            <h2 className="text-xl font-bold text-foreground mb-2">Contact Seller</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Send a message to {listing.seller?.fullName} about this listing
+            </p>
+
+            {inquirySuccess ? (
+              <div className="text-center py-6">
+                <div className="h-12 w-12 rounded-full bg-success/20 flex items-center justify-center mx-auto mb-3">
+                  <Check className="h-6 w-6 text-success" />
+                </div>
+                <p className="font-medium text-foreground">Message Sent!</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  The seller will receive your inquiry via email and SMS
+                </p>
+                <Button 
+                  variant="secondary" 
+                  className="mt-4"
+                  onClick={() => {
+                    setShowContactModal(false);
+                    setInquirySuccess(false);
+                    setInquiryMessage('');
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+            ) : (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!inquiryMessage.trim()) return;
+                  
+                  setIsSendingInquiry(true);
+                  try {
+                    const token = localStorage.getItem('accessToken');
+                    const res = await fetch(`${API_BASE_URL}/api/v1/inquiries`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({
+                        listingId: listing.id,
+                        message: inquiryMessage,
+                      }),
+                    });
+                    
+                    if (res.ok) {
+                      setInquirySuccess(true);
+                    } else {
+                      // Show direct contact options as fallback
+                      alert('Unable to send message through the platform. Please use the direct contact options below.');
+                    }
+                  } catch (error) {
+                    alert('Unable to send message. Please use the direct contact options below.');
+                  } finally {
+                    setIsSendingInquiry(false);
+                  }
+                }}
+              >
+                <div className="mb-4">
+                  <label className="text-sm font-medium text-foreground mb-1.5 block">
+                    Your Message
+                  </label>
+                  <textarea
+                    value={inquiryMessage}
+                    onChange={(e) => setInquiryMessage(e.target.value)}
+                    placeholder={`Hi, I'm interested in "${listing.title}". I would like to know more about...`}
+                    rows={4}
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                    required
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="flex-1"
+                    onClick={() => setShowContactModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    className="flex-1"
+                    disabled={isSendingInquiry || !inquiryMessage.trim()}
+                  >
+                    {isSendingInquiry ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Send Message
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* Direct contact options */}
+            {listing.seller?.phone && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <p className="text-xs text-muted-foreground mb-2">Or contact directly:</p>
+                <div className="flex gap-2">
+                  <a
+                    href={`tel:${listing.seller.phone}`}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
+                  >
+                    <Phone className="h-4 w-4" />
+                    Call
+                  </a>
+                  <a
+                    href={`https://wa.me/${listing.seller.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi, I'm interested in your listing "${listing.title}" on Ghana Lands.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
+                  >
+                    WhatsApp
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

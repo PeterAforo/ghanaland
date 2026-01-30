@@ -1,0 +1,316 @@
+{
+  "$schema": "https://ghanlands.dev/schemas/motion.spec.schema.json",
+  "name": "hero.motion.spec",
+  "version": "1.0.0",
+  "engine": "gsap",
+  "notes": [
+    "Trust-first marketplace motion: calm, minimal, no flashy easing.",
+    "All animations must respect prefers-reduced-motion.",
+    "Hero animation runs once per page view; re-entry animations only on hard navigation, not on scroll back."
+  ],
+  "selectors": {
+    "root": "[data-hero='root']",
+    "nav": "[data-hero='nav']",
+    "eyebrow": "[data-hero='eyebrow']",
+    "headline": "[data-hero='headline']",
+    "headlineLine": "[data-hero='headline-line']",
+    "subtext": "[data-hero='subtext']",
+    "searchCard": "[data-hero='search-card']",
+    "searchInput": "[data-hero='search-input']",
+    "regionSelect": "[data-hero='region-select']",
+    "verifiedToggle": "[data-hero='verified-toggle']",
+    "searchButton": "[data-hero='search-button']",
+    "secondaryCta": "[data-hero='secondary-cta']",
+    "trustStrip": "[data-hero='trust-strip']",
+    "trustItem": "[data-hero='trust-item']",
+    "bgAccent": "[data-hero='bg-accent']"
+  },
+  "accessibility": {
+    "prefersReducedMotion": {
+      "enabled": true,
+      "behavior": "disable-animations",
+      "fallback": {
+        "setFinalState": true,
+        "finalStateSelectors": [
+          "[data-hero='eyebrow']",
+          "[data-hero='headline']",
+          "[data-hero='subtext']",
+          "[data-hero='search-card']",
+          "[data-hero='secondary-cta']",
+          "[data-hero='trust-strip']"
+        ]
+      }
+    },
+    "focusBehavior": {
+      "onFocusVisible": "no-motion",
+      "onKeyboardNavigation": "skip-entrance-if-not-started"
+    }
+  },
+  "defaults": {
+    "duration": 0.6,
+    "ease": "power2.out",
+    "stagger": 0.08,
+    "overwrite": "auto",
+    "clearProps": "transform,opacity"
+  },
+  "breakpoints": {
+    "mobileMax": 767,
+    "tabletMax": 1023,
+    "desktopMin": 1024
+  },
+  "timelines": [
+    {
+      "id": "heroEnter",
+      "trigger": {
+        "type": "onMount",
+        "once": true,
+        "scope": "[data-hero='root']",
+        "waitForFonts": true,
+        "waitForImages": false
+      },
+      "initialState": [
+        {
+          "targets": "[data-hero='bg-accent']",
+          "vars": { "opacity": 0, "scale": 0.98 }
+        },
+        {
+          "targets": "[data-hero='eyebrow']",
+          "vars": { "opacity": 0, "y": 10 }
+        },
+        {
+          "targets": "[data-hero='headline']",
+          "vars": { "opacity": 0, "y": 14 }
+        },
+        {
+          "targets": "[data-hero='headline-line']",
+          "vars": { "opacity": 0, "y": 10 }
+        },
+        {
+          "targets": "[data-hero='subtext']",
+          "vars": { "opacity": 0, "y": 12 }
+        },
+        {
+          "targets": "[data-hero='search-card']",
+          "vars": { "opacity": 0, "y": 14, "scale": 0.985 }
+        },
+        {
+          "targets": "[data-hero='secondary-cta']",
+          "vars": { "opacity": 0, "y": 10 }
+        },
+        {
+          "targets": "[data-hero='trust-strip']",
+          "vars": { "opacity": 0, "y": 10 }
+        },
+        {
+          "targets": "[data-hero='trust-item']",
+          "vars": { "opacity": 0, "y": 8 }
+        }
+      ],
+      "steps": [
+        {
+          "at": 0.0,
+          "type": "to",
+          "targets": "[data-hero='bg-accent']",
+          "vars": { "opacity": 1, "scale": 1, "duration": 0.8, "ease": "power1.out" }
+        },
+        {
+          "at": 0.05,
+          "type": "to",
+          "targets": "[data-hero='eyebrow']",
+          "vars": { "opacity": 1, "y": 0, "duration": 0.45, "ease": "power2.out" }
+        },
+        {
+          "at": 0.12,
+          "type": "to",
+          "targets": "[data-hero='headline']",
+          "vars": { "opacity": 1, "y": 0, "duration": 0.55, "ease": "power2.out" }
+        },
+        {
+          "at": 0.14,
+          "type": "to",
+          "targets": "[data-hero='headline-line']",
+          "vars": { "opacity": 1, "y": 0, "duration": 0.5, "stagger": 0.08, "ease": "power2.out" }
+        },
+        {
+          "at": 0.22,
+          "type": "to",
+          "targets": "[data-hero='subtext']",
+          "vars": { "opacity": 1, "y": 0, "duration": 0.5, "ease": "power2.out" }
+        },
+        {
+          "at": 0.32,
+          "type": "to",
+          "targets": "[data-hero='search-card']",
+          "vars": { "opacity": 1, "y": 0, "scale": 1, "duration": 0.55, "ease": "power2.out" }
+        },
+        {
+          "at": 0.42,
+          "type": "to",
+          "targets": "[data-hero='secondary-cta']",
+          "vars": { "opacity": 1, "y": 0, "duration": 0.45, "ease": "power2.out" }
+        },
+        {
+          "at": 0.48,
+          "type": "to",
+          "targets": "[data-hero='trust-strip']",
+          "vars": { "opacity": 1, "y": 0, "duration": 0.45, "ease": "power2.out" }
+        },
+        {
+          "at": 0.5,
+          "type": "to",
+          "targets": "[data-hero='trust-item']",
+          "vars": { "opacity": 1, "y": 0, "duration": 0.45, "stagger": 0.06, "ease": "power2.out" }
+        }
+      ],
+      "finalState": [
+        {
+          "targets": "[data-hero='eyebrow'],[data-hero='headline'],[data-hero='subtext'],[data-hero='search-card'],[data-hero='secondary-cta'],[data-hero='trust-strip'],[data-hero='trust-item']",
+          "vars": { "opacity": 1, "y": 0, "scale": 1 }
+        }
+      ]
+    },
+    {
+      "id": "heroSearchHover",
+      "trigger": {
+        "type": "onHover",
+        "targets": "[data-hero='search-card']",
+        "pointer": "fine",
+        "ignoreIfReducedMotion": true
+      },
+      "steps": [
+        {
+          "type": "to",
+          "targets": "[data-hero='search-card']",
+          "vars": { "y": -2, "duration": 0.25, "ease": "power1.out" }
+        },
+        {
+          "type": "to",
+          "targets": "[data-hero='bg-accent']",
+          "vars": { "scale": 1.005, "duration": 0.35, "ease": "power1.out" }
+        }
+      ],
+      "reverseOnLeave": true
+    },
+    {
+      "id": "heroSearchFocus",
+      "trigger": {
+        "type": "onFocusWithin",
+        "targets": "[data-hero='search-card']",
+        "ignoreIfReducedMotion": true
+      },
+      "steps": [
+        {
+          "type": "to",
+          "targets": "[data-hero='search-card']",
+          "vars": { "scale": 1.01, "duration": 0.18, "ease": "power1.out" }
+        }
+      ],
+      "reverseOnBlur": true
+    },
+    {
+      "id": "heroVerifiedToggle",
+      "trigger": {
+        "type": "onClick",
+        "targets": "[data-hero='verified-toggle']",
+        "ignoreIfReducedMotion": true
+      },
+      "steps": [
+        {
+          "type": "fromTo",
+          "targets": "[data-hero='verified-toggle']",
+          "fromVars": { "scale": 1 },
+          "toVars": { "scale": 1.04, "duration": 0.12, "ease": "power1.out", "yoyo": true, "repeat": 1 }
+        }
+      ]
+    },
+    {
+      "id": "heroSearchButtonPress",
+      "trigger": {
+        "type": "onPointerDown",
+        "targets": "[data-hero='search-button']",
+        "ignoreIfReducedMotion": true
+      },
+      "steps": [
+        {
+          "type": "to",
+          "targets": "[data-hero='search-button']",
+          "vars": { "scale": 0.98, "duration": 0.08, "ease": "power1.out" }
+        }
+      ],
+      "reverseOnPointerUp": true
+    },
+    {
+      "id": "heroSecondaryCtaHover",
+      "trigger": {
+        "type": "onHover",
+        "targets": "[data-hero='secondary-cta']",
+        "pointer": "fine",
+        "ignoreIfReducedMotion": true
+      },
+      "steps": [
+        {
+          "type": "to",
+          "targets": "[data-hero='secondary-cta']",
+          "vars": { "x": 2, "duration": 0.18, "ease": "power1.out" }
+        }
+      ],
+      "reverseOnLeave": true
+    }
+  ],
+  "scrollAnimations": [
+    {
+      "id": "heroParallaxBg",
+      "enabled": true,
+      "plugin": "ScrollTrigger",
+      "trigger": {
+        "start": "top top",
+        "end": "bottom top",
+        "scrub": 0.6,
+        "ignoreIfReducedMotion": true
+      },
+      "steps": [
+        {
+          "type": "to",
+          "targets": "[data-hero='bg-accent']",
+          "vars": { "y": -18, "ease": "none" }
+        }
+      ]
+    }
+  ],
+  "performance": {
+    "force3D": true,
+    "willChange": [
+      "[data-hero='bg-accent']",
+      "[data-hero='eyebrow']",
+      "[data-hero='headline']",
+      "[data-hero='subtext']",
+      "[data-hero='search-card']",
+      "[data-hero='trust-item']"
+    ],
+    "lazyInit": true,
+    "cleanupOnUnmount": true
+  },
+  "implementationHints": {
+    "requiredDataAttributes": [
+      "data-hero='root'",
+      "data-hero='eyebrow'",
+      "data-hero='headline'",
+      "data-hero='headline-line'",
+      "data-hero='subtext'",
+      "data-hero='search-card'",
+      "data-hero='search-input'",
+      "data-hero='region-select'",
+      "data-hero='verified-toggle'",
+      "data-hero='search-button'",
+      "data-hero='secondary-cta'",
+      "data-hero='trust-strip'",
+      "data-hero='trust-item'",
+      "data-hero='bg-accent'"
+    ],
+    "nextjsNotes": [
+      "Initialize timelines inside useLayoutEffect to avoid hydration mismatch.",
+      "Scope GSAP selectors using gsap.context(rootRef).",
+      "Kill ScrollTrigger instances on unmount."
+    ]
+  }
+}

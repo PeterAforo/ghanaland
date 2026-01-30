@@ -11,6 +11,8 @@ import { Eye, EyeOff, Loader2, Mail, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Header } from '@/components/layout/header';
+import { Footer } from '@/components/layout/footer';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -50,17 +52,16 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-primary/5 to-background px-4 py-12">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link href="/" className="text-2xl font-bold text-primary">
-            Ghana Lands
-          </Link>
-          <p className="mt-2 text-muted-foreground">
-            Welcome back! Sign in to continue.
-          </p>
-        </div>
+    <div className="min-h-screen flex flex-col bg-background">
+      <Header />
+      <main className="flex-1 flex items-center justify-center bg-gradient-to-b from-primary/5 to-background px-4 py-12">
+        <div className="w-full max-w-md">
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <p className="text-muted-foreground">
+              Welcome back! Sign in to continue.
+            </p>
+          </div>
 
         <Card className="border-border bg-card dark:border-border dark:bg-card">
           <CardHeader className="space-y-1">
@@ -155,10 +156,12 @@ export default function LoginPage() {
         </Card>
 
         {/* Trust copy */}
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Secure login via encrypted connection
-        </p>
-      </div>
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            Secure login via encrypted connection
+          </p>
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 }

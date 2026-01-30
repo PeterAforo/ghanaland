@@ -137,8 +137,9 @@ These wrap shadcn primitives and enforce tokens/variants:
      - `secondary`
      - `ghost`
      - `destructive`
+     - `outline` (added 2026-01-27)
    - Sizes:
-     - `sm`, `md`, `lg`
+     - `sm`, `md`, `lg`, `icon`
    - Rules:
      - Only one primary button per view (recommended).
      - Destructive always requires confirmation.
