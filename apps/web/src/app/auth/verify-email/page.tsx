@@ -2,48 +2,52 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Mail, Loader2, CheckCircle, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { useAuth } from '@/lib/auth';
+import { Header } from '@/components/layout/header';
 import { API_BASE_URL } from '@/lib/api';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [codeSent, setCodeSent] = useState(false);
+  const [codeSent, setCodeSent] = useState(true); // Code is sent during registration
+  
+  // Get email and userId from URL params (passed from registration)
+  const email = searchParams.get('email') || '';
+  const userId = searchParams.get('uid') || '';
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push('/auth/login?redirect=/auth/verify-email');
+    if (!email || !userId) {
+      router.push('/auth/register');
     }
-  }, [authLoading, isAuthenticated, router]);
+  }, [email, userId, router]);
 
   const sendVerificationCode = async () => {
     setIsSending(true);
     setError(null);
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${API_BASE_URL}/auth/send-verification`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/resend-verification`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ email }),
       });
 
       const data = await res.json();
 
       if (data.success) {
         setCodeSent(true);
+        setError(null);
       } else {
         setError(data.error?.message || 'Failed to send verification code');
       }
@@ -65,14 +69,12 @@ export default function VerifyEmailPage() {
     setError(null);
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${API_BASE_URL}/auth/verify-email`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/verify-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ email, code }),
       });
 
       const data = await res.json();
@@ -89,7 +91,7 @@ export default function VerifyEmailPage() {
     }
   };
 
-  if (authLoading) {
+  if (!email || !userId) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -99,68 +101,46 @@ export default function VerifyEmailPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-background p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-8 pb-8 text-center">
-            <div className="h-16 w-16 rounded-full bg-success/20 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="h-8 w-8 text-success" />
-            </div>
-            <h2 className="text-2xl font-bold text-foreground">Email Verified!</h2>
-            <p className="text-muted-foreground mt-2">
-              Your email has been successfully verified. You now have full access to all features.
-            </p>
-            <Link href="/dashboard">
-              <Button variant="primary" className="mt-6">
-                Go to Dashboard
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex flex-col bg-background">
+        <Header />
+        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-primary/5 to-background p-4">
+          <Card className="w-full max-w-md">
+            <CardContent className="pt-8 pb-8 text-center">
+              <div className="h-16 w-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-foreground">Email Verified!</h2>
+              <p className="text-muted-foreground mt-2">
+                Your account is now activated. You can log in to access your dashboard.
+              </p>
+              <Link href="/auth/login">
+                <Button className="mt-6">
+                  Continue to Login
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <Mail className="h-7 w-7 text-primary" />
-          </div>
-          <CardTitle className="text-2xl">Verify Your Email</CardTitle>
-          <CardDescription>
-            {codeSent
-              ? `We've sent a verification code to ${user?.email}`
-              : 'Verify your email to unlock all features'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!codeSent ? (
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground mb-6">
-                Click the button below to receive a verification code at your email address.
-              </p>
-              <Button
-                variant="primary"
-                className="w-full"
-                onClick={sendVerificationCode}
-                disabled={isSending}
-              >
-                {isSending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="h-4 w-4 mr-2" />
-                    Send Verification Code
-                  </>
-                )}
-              </Button>
+    <div className="min-h-screen flex flex-col bg-background">
+      <Header />
+      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-primary/5 to-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+              <Mail className="h-7 w-7 text-primary" />
             </div>
-          ) : (
+            <CardTitle className="text-2xl">Verify Your Email</CardTitle>
+            <CardDescription>
+              We&apos;ve sent a 6-digit verification code to <strong>{email}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <form onSubmit={verifyEmail} className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">
@@ -208,15 +188,18 @@ export default function VerifyEmailPage() {
                 </button>
               </div>
             </form>
-          )}
 
-          <div className="mt-6 text-center">
-            <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground">
-              Skip for now
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="mt-6 pt-4 border-t text-center">
+              <p className="text-sm text-muted-foreground">
+                Wrong email?{' '}
+                <Link href="/auth/register" className="text-primary hover:underline">
+                  Go back to registration
+                </Link>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

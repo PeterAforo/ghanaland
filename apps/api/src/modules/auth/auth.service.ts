@@ -2,10 +2,14 @@ import { Injectable, UnauthorizedException, ConflictException, BadRequestExcepti
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as dns from 'dns';
+import { promisify } from 'util';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationTemplate, NotificationType } from '../notifications/dto';
 import { RegisterDto, LoginDto } from './dto';
+
+const resolveMx = promisify(dns.resolveMx);
 
 @Injectable()
 export class AuthService {
@@ -19,6 +23,9 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    // Validate email format and domain
+    await this.validateEmail(dto.email);
+
     // Check for existing email
     const existingEmail = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -57,10 +64,12 @@ export class AuthService {
         fullName: dto.fullName,
         phone: dto.phone,
         ghanaCardNumber: dto.ghanaCardNumber,
+        emailVerified: false,
       },
     });
 
-    const tokens = await this.generateTokens(user.id, user.tenantId, user.email);
+    // Send verification email
+    await this.sendVerificationEmail(user.id);
 
     return {
       success: true,
@@ -69,8 +78,10 @@ export class AuthService {
           id: user.id,
           email: user.email,
           fullName: user.fullName,
+          emailVerified: false,
         },
-        ...tokens,
+        requiresVerification: true,
+        message: 'Registration successful. Please check your email for the verification code.',
       },
       meta: { requestId: `req_${Date.now()}` },
       error: null,
@@ -92,6 +103,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Check if email is verified
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Please verify your email before logging in. Check your inbox for the verification code.');
+    }
+
+    // Check if account is active
+    if (user.accountStatus !== 'ACTIVE') {
+      throw new UnauthorizedException('Your account is not active. Please contact support.');
+    }
+
     const tokens = await this.generateTokens(user.id, user.tenantId, user.email);
 
     return {
@@ -101,6 +122,7 @@ export class AuthService {
           id: user.id,
           email: user.email,
           fullName: user.fullName,
+          emailVerified: user.emailVerified,
           roles: user.userRoles.map((ur) => ur.role.name),
         },
         ...tokens,
@@ -228,6 +250,45 @@ export class AuthService {
     };
   }
 
+  async resendVerificationEmail(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      // Don't reveal if email exists
+      return {
+        success: true,
+        data: { message: 'If the email exists, a verification code has been sent' },
+        meta: { requestId: `req_${Date.now()}` },
+        error: null,
+      };
+    }
+
+    if (user.emailVerified) {
+      return {
+        success: true,
+        data: { message: 'Email is already verified' },
+        meta: { requestId: `req_${Date.now()}` },
+        error: null,
+      };
+    }
+
+    return this.sendVerificationEmail(user.id);
+  }
+
+  async verifyEmailByEmail(email: string, code: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid verification request');
+    }
+
+    return this.verifyEmail(user.id, code);
+  }
+
   async requestPasswordReset(email: string) {
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -316,6 +377,40 @@ export class AuthService {
       meta: { requestId: `req_${Date.now()}` },
       error: null,
     };
+  }
+
+  private async validateEmail(email: string): Promise<void> {
+    // Basic format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new BadRequestException('Invalid email format');
+    }
+
+    // Extract domain
+    const domain = email.split('@')[1];
+
+    // Check for disposable email domains
+    const disposableDomains = [
+      'tempmail.com', 'throwaway.com', 'guerrillamail.com', 'mailinator.com',
+      'temp-mail.org', '10minutemail.com', 'fakeinbox.com', 'trashmail.com',
+      'yopmail.com', 'getnada.com', 'maildrop.cc', 'dispostable.com',
+    ];
+    if (disposableDomains.includes(domain.toLowerCase())) {
+      throw new BadRequestException('Disposable email addresses are not allowed');
+    }
+
+    // Verify domain has MX records (can receive email)
+    try {
+      const mxRecords = await resolveMx(domain);
+      if (!mxRecords || mxRecords.length === 0) {
+        throw new BadRequestException('Email domain does not appear to be valid');
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Unable to verify email domain. Please use a valid email address.');
+    }
   }
 
   private async generateTokens(userId: string, tenantId: string, email: string) {

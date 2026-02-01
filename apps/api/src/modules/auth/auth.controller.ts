@@ -40,22 +40,18 @@ export class AuthController {
     return this.authService.logout(dto.refreshToken);
   }
 
-  @Post('send-verification')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
+  @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Send email verification code' })
-  async sendVerification(@Request() req: any) {
-    return this.authService.sendVerificationEmail(req.user.id);
+  @ApiOperation({ summary: 'Resend email verification code (no auth required)' })
+  async resendVerification(@Body() dto: { email: string }) {
+    return this.authService.resendVerificationEmail(dto.email);
   }
 
   @Post('verify-email')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify email with code' })
-  async verifyEmail(@Request() req: any, @Body() dto: { code: string }) {
-    return this.authService.verifyEmail(req.user.id, dto.code);
+  @ApiOperation({ summary: 'Verify email with code (no auth required)' })
+  async verifyEmail(@Body() dto: { email: string; code: string }) {
+    return this.authService.verifyEmailByEmail(dto.email, dto.code);
   }
 
   @Post('forgot-password')

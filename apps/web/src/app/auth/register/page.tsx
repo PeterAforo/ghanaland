@@ -165,18 +165,31 @@ export default function RegisterPage() {
     setIsLoading(true);
     setError(null);
 
-    const result = await registerUser({
-      email: data.email,
-      password: data.password,
-      fullName: data.fullName,
-      phone: data.phone,
-      ghanaCardNumber: data.ghanaCardNumber,
-    });
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          fullName: data.fullName,
+          phone: data.phone,
+          ghanaCardNumber: data.ghanaCardNumber,
+        }),
+      });
 
-    if (result.success) {
-      router.push('/dashboard');
-    } else {
-      setError(result.error || 'Registration failed');
+      const result = await res.json();
+
+      if (result.success) {
+        // Redirect to email verification page
+        const userId = result.data.user.id;
+        const email = encodeURIComponent(data.email);
+        router.push(`/auth/verify-email?email=${email}&uid=${userId}`);
+      } else {
+        setError(result.error?.message || 'Registration failed');
+      }
+    } catch (err) {
+      setError('Registration failed. Please try again.');
     }
 
     setIsLoading(false);
