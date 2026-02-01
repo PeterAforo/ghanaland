@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Delete, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminService } from './admin.service';
@@ -30,6 +30,21 @@ export class AdminUsersController {
     });
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: 'Get single user by ID' })
+  async getUser(@Param('id') id: string) {
+    return this.adminService.getUser(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update user' })
+  async updateUser(
+    @Param('id') id: string,
+    @Body() body: { fullName?: string; phone?: string; accountStatus?: string },
+  ) {
+    return this.adminService.updateUser(id, body);
+  }
+
   @Put(':id/status')
   @ApiOperation({ summary: 'Update user account status' })
   async updateStatus(
@@ -37,5 +52,17 @@ export class AdminUsersController {
     @Body() body: { status: string },
   ) {
     return this.adminService.updateUserStatus(id, body.status);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete (deactivate) user' })
+  async deleteUser(@Param('id') id: string) {
+    return this.adminService.deleteUser(id);
+  }
+
+  @Post('bulk-delete')
+  @ApiOperation({ summary: 'Bulk delete (deactivate) users' })
+  async bulkDeleteUsers(@Body() body: { ids: string[] }) {
+    return this.adminService.deleteUsers(body.ids);
   }
 }

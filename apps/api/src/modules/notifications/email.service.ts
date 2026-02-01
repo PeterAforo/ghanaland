@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-import { AxiosError } from 'axios';
+import * as nodemailer from 'nodemailer';
+import { Transporter } from 'nodemailer';
 
 export interface EmailResponse {
   success: boolean;
@@ -22,26 +21,29 @@ export interface EmailOptions {
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly postmarkUrl = 'https://api.postmarkapp.com/email';
+  private transporter: Transporter;
 
-  constructor(
-    private config: ConfigService,
-    private httpService: HttpService,
-  ) {}
-
-  private getApiKey(): string {
-    return this.config.get<string>('POSTMARK_API_KEY') || '';
+  constructor(private config: ConfigService) {
+    this.transporter = nodemailer.createTransport({
+      host: this.config.get<string>('SMTP_HOST') || 'mail.privateemail.com',
+      port: this.config.get<number>('SMTP_PORT') || 465,
+      secure: true, // SSL/TLS
+      auth: {
+        user: this.config.get<string>('SMTP_USER') || '',
+        pass: this.config.get<string>('SMTP_PASS') || '',
+      },
+    });
   }
 
   private getFromEmail(): string {
-    return this.config.get<string>('EMAIL_FROM') || 'noreply@ghanalands.com';
+    return this.config.get<string>('SMTP_USER') || 'admin@buyghanalands.com';
   }
 
   async sendEmail(options: EmailOptions): Promise<EmailResponse> {
-    const apiKey = this.getApiKey();
+    const smtpUser = this.config.get<string>('SMTP_USER');
     
-    if (!apiKey) {
-      this.logger.warn('Postmark API key not configured, skipping email');
+    if (!smtpUser) {
+      this.logger.warn('SMTP not configured, skipping email');
       return {
         success: false,
         message: 'Email service not configured',
@@ -49,41 +51,30 @@ export class EmailService {
     }
 
     try {
-      const payload = {
-        From: options.from || this.getFromEmail(),
-        To: options.to,
-        Subject: options.subject,
-        HtmlBody: options.htmlBody,
-        TextBody: options.textBody || this.stripHtml(options.htmlBody),
-        ReplyTo: options.replyTo,
-        MessageStream: 'outbound',
-      };
-
       this.logger.log(`Sending email to ${options.to}: ${options.subject}`);
 
-      const response = await firstValueFrom(
-        this.httpService.post(this.postmarkUrl, payload, {
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'X-Postmark-Server-Token': apiKey,
-          },
-        }),
-      );
+      const info = await this.transporter.sendMail({
+        from: `"Ghana Lands" <${options.from || this.getFromEmail()}>`,
+        to: options.to,
+        subject: options.subject,
+        html: options.htmlBody,
+        text: options.textBody || this.stripHtml(options.htmlBody),
+        replyTo: options.replyTo,
+      });
 
-      this.logger.log(`Email sent successfully to ${options.to}`);
+      this.logger.log(`Email sent successfully to ${options.to}, messageId: ${info.messageId}`);
 
       return {
         success: true,
-        messageId: response.data?.MessageID,
+        messageId: info.messageId,
         message: 'Email sent successfully',
       };
     } catch (err) {
-      const error = err as AxiosError<any>;
-      this.logger.error(`Postmark email error: ${error.message}`, error.stack);
+      const error = err as Error;
+      this.logger.error(`SMTP email error: ${error.message}`, error.stack);
       return {
         success: false,
-        message: error.response?.data?.Message || error.message,
+        message: error.message,
       };
     }
   }
@@ -93,52 +84,15 @@ export class EmailService {
     templateAlias: string,
     templateModel: Record<string, any>,
   ): Promise<EmailResponse> {
-    const apiKey = this.getApiKey();
-
-    if (!apiKey) {
-      this.logger.warn('Postmark API key not configured, skipping email');
-      return {
-        success: false,
-        message: 'Email service not configured',
-      };
-    }
-
-    try {
-      const payload = {
-        From: this.getFromEmail(),
-        To: to,
-        TemplateAlias: templateAlias,
-        TemplateModel: templateModel,
-        MessageStream: 'outbound',
-      };
-
-      const response = await firstValueFrom(
-        this.httpService.post(
-          'https://api.postmarkapp.com/email/withTemplate',
-          payload,
-          {
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'X-Postmark-Server-Token': apiKey,
-            },
-          },
-        ),
-      );
-
-      return {
-        success: true,
-        messageId: response.data?.MessageID,
-        message: 'Template email sent successfully',
-      };
-    } catch (err) {
-      const error = err as AxiosError<any>;
-      this.logger.error(`Postmark template email error: ${error.message}`);
-      return {
-        success: false,
-        message: error.response?.data?.Message || error.message,
-      };
-    }
+    // For SMTP, we don't have template support, so just send a basic email
+    const subject = templateModel.subject || 'Ghana Lands Notification';
+    const body = templateModel.body || JSON.stringify(templateModel);
+    
+    return this.sendEmail({
+      to,
+      subject,
+      htmlBody: body,
+    });
   }
 
   private stripHtml(html: string): string {

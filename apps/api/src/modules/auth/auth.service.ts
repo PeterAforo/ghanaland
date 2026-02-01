@@ -201,6 +201,13 @@ export class AuthService {
     // Store code
     this.verificationCodes.set(userId, { code, expiresAt });
 
+    // Log code in development for testing
+    if (this.config.get('NODE_ENV') === 'development') {
+      console.log(`\n========================================`);
+      console.log(`📧 VERIFICATION CODE for ${user.email}: ${code}`);
+      console.log(`========================================\n`);
+    }
+
     // Send email
     await this.notifications.sendNotification(
       userId,

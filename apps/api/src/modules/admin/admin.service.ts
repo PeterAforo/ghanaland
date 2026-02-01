@@ -417,6 +417,222 @@ export class AdminService {
   // AUDIT LOGS
   // ============================================================================
 
+  // ============================================================================
+  // SETTINGS
+  // ============================================================================
+
+  private platformSettings: Record<string, any> = {
+    platformName: 'Ghana Lands',
+    platformFeePercentage: 10,
+    escrowHoldDays: 7,
+    verificationFeeGhs: 500,
+    minListingPriceGhs: 1000,
+    maxListingPriceGhs: 50000000,
+    supportEmail: 'support@ghanalands.com',
+    supportPhone: '+233 XX XXX XXXX',
+    enableEmailNotifications: true,
+    enableSmsNotifications: true,
+    enablePushNotifications: false,
+    maintenanceMode: false,
+    allowNewRegistrations: true,
+  };
+
+  async getSettings() {
+    // In production, this would fetch from database
+    // For now, return in-memory settings
+    return {
+      success: true,
+      data: this.platformSettings,
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async updateSettings(settings: Record<string, any>) {
+    // In production, this would save to database
+    this.platformSettings = { ...this.platformSettings, ...settings };
+    return {
+      success: true,
+      data: this.platformSettings,
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  // ============================================================================
+  // USER CRUD
+  // ============================================================================
+
+  async getUser(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        userRoles: { include: { role: true } },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    return {
+      success: true,
+      data: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        fullName: user.fullName,
+        avatarUrl: user.avatarUrl,
+        accountStatus: user.accountStatus,
+        emailVerified: user.emailVerified,
+        phoneVerified: user.phoneVerified,
+        roles: user.userRoles.map((ur) => ur.role.name),
+        createdAt: user.createdAt.toISOString(),
+      },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async updateUser(userId: string, data: { fullName?: string; phone?: string; accountStatus?: string }) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(data.fullName && { fullName: data.fullName }),
+        ...(data.phone && { phone: data.phone }),
+        ...(data.accountStatus && { accountStatus: data.accountStatus as any }),
+      },
+    });
+
+    return {
+      success: true,
+      data: { id: updated.id, fullName: updated.fullName, accountStatus: updated.accountStatus },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async deleteUser(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    // Soft delete - set status to DEACTIVATED
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { accountStatus: 'DEACTIVATED' },
+    });
+
+    return {
+      success: true,
+      data: { message: 'User deactivated successfully' },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async deleteUsers(userIds: string[]) {
+    await this.prisma.user.updateMany({
+      where: { id: { in: userIds } },
+      data: { accountStatus: 'DEACTIVATED' },
+    });
+
+    return {
+      success: true,
+      data: { message: `${userIds.length} users deactivated successfully` },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  // ============================================================================
+  // LISTING CRUD
+  // ============================================================================
+
+  async getListing(listingId: string) {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id: listingId },
+      include: {
+        seller: { select: { id: true, fullName: true, email: true } },
+        media: true,
+      },
+    });
+
+    if (!listing) throw new NotFoundException('Listing not found');
+
+    return {
+      success: true,
+      data: {
+        ...listing,
+        priceGhs: listing.priceGhs.toString(),
+        sizeAcres: listing.sizeAcres.toString(),
+      },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async updateListing(listingId: string, data: { 
+    title?: string; 
+    listingStatus?: string; 
+    verificationStatus?: string;
+    priceGhs?: number;
+  }) {
+    const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
+    if (!listing) throw new NotFoundException('Listing not found');
+
+    const updated = await this.prisma.listing.update({
+      where: { id: listingId },
+      data: {
+        ...(data.title && { title: data.title }),
+        ...(data.listingStatus && { listingStatus: data.listingStatus as any }),
+        ...(data.verificationStatus && { 
+          verificationStatus: data.verificationStatus as any,
+          verifiedAt: data.verificationStatus === 'VERIFIED' ? new Date() : null,
+        }),
+        ...(data.priceGhs && { priceGhs: data.priceGhs }),
+      },
+    });
+
+    return {
+      success: true,
+      data: { id: updated.id, title: updated.title, listingStatus: updated.listingStatus },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async deleteListing(listingId: string) {
+    const listing = await this.prisma.listing.findUnique({ where: { id: listingId } });
+    if (!listing) throw new NotFoundException('Listing not found');
+
+    await this.prisma.listing.delete({ where: { id: listingId } });
+
+    return {
+      success: true,
+      data: { message: 'Listing deleted successfully' },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async deleteListings(listingIds: string[]) {
+    await this.prisma.listing.deleteMany({
+      where: { id: { in: listingIds } },
+    });
+
+    return {
+      success: true,
+      data: { message: `${listingIds.length} listings deleted successfully` },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  // ============================================================================
+  // AUDIT LOGS
+  // ============================================================================
+
   async getAuditLogs(query: {
     entityType?: string;
     action?: string;

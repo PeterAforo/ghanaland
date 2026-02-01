@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Delete, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminService } from './admin.service';
@@ -33,6 +33,21 @@ export class AdminListingsController {
     });
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: 'Get single listing by ID' })
+  async getListing(@Param('id') id: string) {
+    return this.adminService.getListing(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update listing' })
+  async updateListing(
+    @Param('id') id: string,
+    @Body() body: { title?: string; listingStatus?: string; verificationStatus?: string; priceGhs?: number },
+  ) {
+    return this.adminService.updateListing(id, body);
+  }
+
   @Put(':id/status')
   @ApiOperation({ summary: 'Update listing status' })
   async updateStatus(
@@ -49,5 +64,17 @@ export class AdminListingsController {
     @Body() body: { status: string; notes?: string },
   ) {
     return this.adminService.updateVerificationStatus(id, body.status, body.notes);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete listing' })
+  async deleteListing(@Param('id') id: string) {
+    return this.adminService.deleteListing(id);
+  }
+
+  @Post('bulk-delete')
+  @ApiOperation({ summary: 'Bulk delete listings' })
+  async bulkDeleteListings(@Body() body: { ids: string[] }) {
+    return this.adminService.deleteListings(body.ids);
   }
 }

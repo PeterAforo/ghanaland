@@ -63,7 +63,47 @@ async function main() {
     },
   });
 
-  console.log('✅ Users created');
+  // Create admin user
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@buyghanalands.com' },
+    update: {},
+    create: {
+      email: 'admin@buyghanalands.com',
+      passwordHash: hashedPassword,
+      fullName: 'System Admin',
+      phone: '+233200000000',
+      ghanaCardNumber: 'GHA-000000000-0',
+      tenantId: tenant.id,
+      emailVerified: true,
+    },
+  });
+
+  // Create ADMIN role if not exists
+  const adminRole = await prisma.role.upsert({
+    where: { name: 'ADMIN' },
+    update: {},
+    create: {
+      name: 'ADMIN',
+      description: 'System administrator with full access',
+    },
+  });
+
+  // Assign admin role to admin user
+  await prisma.userRole.upsert({
+    where: {
+      userId_roleId: {
+        userId: admin.id,
+        roleId: adminRole.id,
+      },
+    },
+    update: {},
+    create: {
+      userId: admin.id,
+      roleId: adminRole.id,
+    },
+  });
+
+  console.log('✅ Users created (including admin)');
 
   // Create listings
   const listingsData = [

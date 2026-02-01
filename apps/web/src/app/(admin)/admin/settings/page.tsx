@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { AdminLayout } from '../_components/admin-layout';
 import { API_BASE_URL } from '@/lib/api';
 
 interface PlatformSettings {
@@ -121,13 +122,14 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Platform Settings</h1>
-          <p className="text-muted-foreground">Configure platform-wide settings and preferences</p>
-        </div>
-        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+    <AdminLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Platform Settings</h1>
+            <p className="text-muted-foreground">Configure platform-wide settings and preferences</p>
+          </div>
+          <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -426,6 +428,7 @@ export default function AdminSettingsPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </AdminLayout>
   );
 }

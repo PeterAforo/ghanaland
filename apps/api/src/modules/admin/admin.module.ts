@@ -3,6 +3,7 @@ import { AdminDashboardController } from './admin-dashboard.controller';
 import { AdminUsersController } from './admin-users.controller';
 import { AdminListingsController } from './admin-listings.controller';
 import { AdminTransactionsController } from './admin-transactions.controller';
+import { AdminSettingsController } from './admin-settings.controller';
 import { AdminService } from './admin.service';
 
 @Module({
@@ -11,6 +12,7 @@ import { AdminService } from './admin.service';
     AdminUsersController,
     AdminListingsController,
     AdminTransactionsController,
+    AdminSettingsController,
   ],
   providers: [AdminService],
 })
