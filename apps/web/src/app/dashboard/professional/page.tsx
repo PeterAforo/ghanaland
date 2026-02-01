@@ -189,6 +189,8 @@ export default function ProfessionalDashboardPage() {
   const fetchProfile = async () => {
     try {
       const token = localStorage.getItem('accessToken');
+      if (!token) return;
+      
       const res = await fetch(`${API_BASE_URL}/api/v1/professionals/me/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -197,7 +199,7 @@ export default function ProfessionalDashboardPage() {
         setProfile(data.data);
       }
     } catch (error) {
-      console.error('Failed to fetch profile:', error);
+      // Silent fail - user may not be a professional
     }
   };
 
@@ -205,6 +207,11 @@ export default function ProfessionalDashboardPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('accessToken');
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      
       const res = await fetch(`${API_BASE_URL}/api/v1/professionals/requests/professional`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -214,7 +221,7 @@ export default function ProfessionalDashboardPage() {
         calculateStats(data.data);
       }
     } catch (error) {
-      console.error('Failed to fetch requests:', error);
+      // Silent fail - user may not be a professional
     } finally {
       setIsLoading(false);
     }
