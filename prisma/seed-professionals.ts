@@ -159,6 +159,7 @@ async function main() {
         passwordHash: hashedPassword,
         fullName: prof.fullName,
         phone: prof.phone,
+        ghanaCardNumber: `GHA-PRO-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         emailVerified: true,
         accountStatus: 'ACTIVE',
       },
