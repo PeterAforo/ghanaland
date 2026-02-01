@@ -7,6 +7,9 @@
     "apps/*",
     "packages/*"
   ],
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "scripts": {
     "dev": "concurrently \"npm run dev:web\" \"npm run dev:api\"",
     "dev:web": "npm run dev --workspace=apps/web",
@@ -28,6 +31,7 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "prettier": "^3.2.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
   },
   "engines": {
