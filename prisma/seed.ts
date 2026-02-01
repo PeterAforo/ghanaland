@@ -1,4 +1,4 @@
-import { PrismaClient, LandCategory, LandType, TenureType, ListingStatus, VerificationStatus } from '@prisma/client';
+import { PrismaClient, LandCategory, LandType, TenureType, ListingStatus, VerificationStatus, TierType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -253,6 +253,165 @@ async function main() {
   }
 
   console.log(`✅ Created ${listingsData.length} listings`);
+
+  // Create subscription plans
+  const subscriptionPlans = [
+    {
+      name: 'Free',
+      slug: 'free',
+      description: 'Basic access to browse and search listings',
+      tierType: TierType.FREE,
+      priceMonthlyGhs: 0,
+      priceYearlyGhs: 0,
+      features: ['browse_listings', 'save_favorites', 'send_inquiries'],
+      limits: { maxListings: 1, maxFavorites: 10 },
+      sortOrder: 1,
+    },
+    {
+      name: 'Seller Pro',
+      slug: 'seller-pro',
+      description: 'For serious land sellers who want more visibility',
+      tierType: TierType.SELLER_PRO,
+      priceMonthlyGhs: 99,
+      priceYearlyGhs: 990,
+      features: [
+        'browse_listings',
+        'save_favorites',
+        'send_inquiries',
+        'featured_listings',
+        'listing_analytics',
+        'bulk_upload',
+        'priority_verification',
+        'virtual_tours',
+      ],
+      limits: { maxListings: 20, maxFeatured: 5 },
+      sortOrder: 2,
+    },
+    {
+      name: 'Buyer Pro',
+      slug: 'buyer-pro',
+      description: 'For buyers who want early access and insights',
+      tierType: TierType.BUYER_PRO,
+      priceMonthlyGhs: 49,
+      priceYearlyGhs: 490,
+      features: [
+        'browse_listings',
+        'save_favorites',
+        'send_inquiries',
+        'saved_search_alerts',
+        'price_drop_alerts',
+        'exclusive_listings',
+        'due_diligence_basic',
+      ],
+      limits: { maxSavedSearches: 10, maxAlerts: 20 },
+      sortOrder: 3,
+    },
+    {
+      name: 'Professional Pro',
+      slug: 'professional-pro',
+      description: 'For surveyors, lawyers, architects & engineers',
+      tierType: TierType.PROFESSIONAL_PRO,
+      priceMonthlyGhs: 149,
+      priceYearlyGhs: 1490,
+      features: [
+        'browse_listings',
+        'save_favorites',
+        'send_inquiries',
+        'verified_badge',
+        'priority_placement',
+        'professional_profile',
+        'service_catalog',
+        'client_management',
+        'booking_calendar',
+        'review_management',
+      ],
+      limits: { maxServices: 20, maxClients: -1 },
+      sortOrder: 4,
+    },
+    {
+      name: 'Agent Pro',
+      slug: 'agent-pro',
+      description: 'For real estate agents and agencies',
+      tierType: TierType.AGENT_PRO,
+      priceMonthlyGhs: 299,
+      priceYearlyGhs: 2990,
+      features: [
+        'browse_listings',
+        'save_favorites',
+        'send_inquiries',
+        'featured_listings',
+        'listing_analytics',
+        'bulk_upload',
+        'priority_verification',
+        'virtual_tours',
+        'saved_search_alerts',
+        'price_drop_alerts',
+        'exclusive_listings',
+        'due_diligence_basic',
+        'due_diligence_comprehensive',
+        'lead_generation',
+        'verified_badge',
+        'priority_placement',
+        'professional_profile',
+        'client_management',
+        'team_management',
+      ],
+      limits: { maxListings: -1, maxTeamMembers: 10 },
+      sortOrder: 5,
+    },
+    {
+      name: 'Enterprise',
+      slug: 'enterprise',
+      description: 'For large agencies and developers',
+      tierType: TierType.ENTERPRISE,
+      priceMonthlyGhs: 999,
+      priceYearlyGhs: 9990,
+      features: [
+        'browse_listings',
+        'save_favorites',
+        'send_inquiries',
+        'featured_listings',
+        'listing_analytics',
+        'bulk_upload',
+        'priority_verification',
+        'virtual_tours',
+        'saved_search_alerts',
+        'price_drop_alerts',
+        'exclusive_listings',
+        'due_diligence_basic',
+        'due_diligence_comprehensive',
+        'lead_generation',
+        'verified_badge',
+        'priority_placement',
+        'professional_profile',
+        'client_management',
+        'team_management',
+        'white_label',
+        'api_access',
+        'dedicated_support',
+      ],
+      limits: { maxListings: -1, maxTeamMembers: -1 },
+      sortOrder: 6,
+    },
+  ];
+
+  for (const plan of subscriptionPlans) {
+    await prisma.subscriptionPlan.upsert({
+      where: { slug: plan.slug },
+      update: {
+        name: plan.name,
+        description: plan.description,
+        priceMonthlyGhs: plan.priceMonthlyGhs,
+        priceYearlyGhs: plan.priceYearlyGhs,
+        features: plan.features,
+        limits: plan.limits,
+        sortOrder: plan.sortOrder,
+      },
+      create: plan,
+    });
+  }
+
+  console.log(`✅ Created ${subscriptionPlans.length} subscription plans`);
 
   console.log('🎉 Seeding completed!');
   console.log('\n📧 Test accounts:');
