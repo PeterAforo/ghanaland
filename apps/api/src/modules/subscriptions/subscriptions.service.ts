@@ -32,6 +32,19 @@ export class SubscriptionsService {
     };
   }
 
+  async getAllPlans() {
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    return {
+      success: true,
+      data: plans,
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
   async getPlanBySlug(slug: string) {
     const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { slug },
@@ -251,6 +264,79 @@ export class SubscriptionsService {
     return {
       success: true,
       data: plan,
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  async deletePlan(planId: string) {
+    // Check if any users are subscribed to this plan
+    const activeSubscriptions = await this.prisma.userSubscription.count({
+      where: {
+        planId,
+        status: { in: ['ACTIVE', 'TRIALING'] },
+      },
+    });
+
+    if (activeSubscriptions > 0) {
+      throw new BadRequestException(
+        `Cannot delete plan with ${activeSubscriptions} active subscriptions. Deactivate it instead.`,
+      );
+    }
+
+    await this.prisma.subscriptionPlan.delete({
+      where: { id: planId },
+    });
+
+    return {
+      success: true,
+      data: { message: 'Plan deleted successfully' },
+      meta: { requestId: `req_${Date.now()}` },
+      error: null,
+    };
+  }
+
+  getAvailableFeatures() {
+    const features = [
+      // Core features (Free tier)
+      { key: 'browse_listings', name: 'Browse Listings', description: 'View all published land listings', category: 'core' },
+      { key: 'save_favorites', name: 'Save Favorites', description: 'Save listings to favorites', category: 'core' },
+      { key: 'send_inquiries', name: 'Send Inquiries', description: 'Contact sellers about listings', category: 'core' },
+      
+      // Seller features
+      { key: 'featured_listings', name: 'Featured Listings', description: 'Promote listings with featured placement', category: 'seller' },
+      { key: 'listing_analytics', name: 'Listing Analytics', description: 'View detailed analytics for your listings', category: 'seller' },
+      { key: 'bulk_upload', name: 'Bulk Upload', description: 'Upload multiple listings at once', category: 'seller' },
+      { key: 'priority_verification', name: 'Priority Verification', description: 'Fast-track listing verification (24-48h)', category: 'seller' },
+      { key: 'virtual_tours', name: 'Virtual Tours', description: 'Add 360° virtual tours to listings', category: 'seller' },
+      
+      // Buyer features
+      { key: 'saved_search_alerts', name: 'Saved Search Alerts', description: 'Get notified when new listings match your search', category: 'buyer' },
+      { key: 'price_drop_alerts', name: 'Price Drop Alerts', description: 'Get notified when listing prices drop', category: 'buyer' },
+      { key: 'exclusive_listings', name: 'Early Access', description: 'See new listings before they go public', category: 'buyer' },
+      { key: 'due_diligence_basic', name: 'Basic Due Diligence', description: 'Access basic due diligence reports', category: 'buyer' },
+      { key: 'due_diligence_comprehensive', name: 'Comprehensive Due Diligence', description: 'Access comprehensive due diligence reports', category: 'buyer' },
+      
+      // Professional features
+      { key: 'verified_badge', name: 'Verified Badge', description: 'Display verified professional badge', category: 'professional' },
+      { key: 'priority_placement', name: 'Priority Placement', description: 'Appear higher in professional search results', category: 'professional' },
+      { key: 'professional_profile', name: 'Professional Profile', description: 'Create a detailed professional profile page', category: 'professional' },
+      { key: 'service_catalog', name: 'Service Catalog', description: 'List your services with pricing', category: 'professional' },
+      { key: 'client_management', name: 'Client Management', description: 'Manage client requests and communications', category: 'professional' },
+      { key: 'booking_calendar', name: 'Booking Calendar', description: 'Allow clients to book appointments', category: 'professional' },
+      { key: 'review_management', name: 'Review Management', description: 'Manage and respond to client reviews', category: 'professional' },
+      { key: 'lead_generation', name: 'Lead Generation', description: 'Receive leads from platform users', category: 'professional' },
+      
+      // Agent/Team features
+      { key: 'team_management', name: 'Team Management', description: 'Add and manage team members', category: 'agent' },
+      { key: 'white_label', name: 'White Label Portal', description: 'Custom branded portal for your agency', category: 'enterprise' },
+      { key: 'api_access', name: 'API Access', description: 'Access to Ghana Lands API', category: 'enterprise' },
+      { key: 'dedicated_support', name: 'Dedicated Support', description: 'Priority customer support', category: 'enterprise' },
+    ];
+
+    return {
+      success: true,
+      data: features,
       meta: { requestId: `req_${Date.now()}` },
       error: null,
     };

@@ -3,20 +3,38 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
+import { PrismaService } from '../../database/prisma.service';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
 export class SubscriptionsController {
-  constructor(private subscriptionsService: SubscriptionsService) {}
+  constructor(
+    private subscriptionsService: SubscriptionsService,
+    private prisma: PrismaService,
+  ) {}
+
+  private async requireAdmin(userId: string): Promise<void> {
+    const adminRole = await this.prisma.userRole.findFirst({
+      where: {
+        userId,
+        role: { name: 'ADMIN' },
+      },
+    });
+    if (!adminRole) {
+      throw new ForbiddenException('Admin access required');
+    }
+  }
 
   // ============================================================================
   // PUBLIC: PLANS
@@ -105,16 +123,26 @@ export class SubscriptionsController {
   // ADMIN: PLAN MANAGEMENT
   // ============================================================================
 
+  @Get('admin/plans')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all plans including inactive (admin)' })
+  async getAdminPlans(@Request() req: any) {
+    await this.requireAdmin(req.user.id);
+    return this.subscriptionsService.getAllPlans();
+  }
+
   @Post('admin/plans')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new plan (admin)' })
   async createPlan(
+    @Request() req: any,
     @Body() body: {
       name: string;
       slug: string;
       description?: string;
-      tierType: 'FREE' | 'SELLER_PRO' | 'BUYER_PRO' | 'AGENT_PRO' | 'ENTERPRISE';
+      tierType: 'FREE' | 'SELLER_PRO' | 'BUYER_PRO' | 'PROFESSIONAL_PRO' | 'AGENT_PRO' | 'ENTERPRISE';
       priceMonthlyGhs: number;
       priceYearlyGhs: number;
       features: string[];
@@ -122,6 +150,7 @@ export class SubscriptionsController {
       sortOrder?: number;
     },
   ) {
+    await this.requireAdmin(req.user.id);
     return this.subscriptionsService.createPlan(body);
   }
 
@@ -130,6 +159,7 @@ export class SubscriptionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a plan (admin)' })
   async updatePlan(
+    @Request() req: any,
     @Param('planId') planId: string,
     @Body() body: Partial<{
       name: string;
@@ -142,7 +172,26 @@ export class SubscriptionsController {
       sortOrder: number;
     }>,
   ) {
+    await this.requireAdmin(req.user.id);
     return this.subscriptionsService.updatePlan(planId, body);
+  }
+
+  @Delete('admin/plans/:planId')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a plan (admin)' })
+  async deletePlan(@Request() req: any, @Param('planId') planId: string) {
+    await this.requireAdmin(req.user.id);
+    return this.subscriptionsService.deletePlan(planId);
+  }
+
+  @Get('admin/features')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all available features (admin)' })
+  async getAvailableFeatures(@Request() req: any) {
+    await this.requireAdmin(req.user.id);
+    return this.subscriptionsService.getAvailableFeatures();
   }
 
   @Post('admin/seed-plans')

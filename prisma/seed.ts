@@ -254,7 +254,7 @@ async function main() {
 
   console.log(`✅ Created ${listingsData.length} listings`);
 
-  // Create subscription plans
+  // Create subscription plans with logical feature distribution
   const subscriptionPlans = [
     {
       name: 'Free',
@@ -263,14 +263,37 @@ async function main() {
       tierType: TierType.FREE,
       priceMonthlyGhs: 0,
       priceYearlyGhs: 0,
-      features: ['browse_listings', 'save_favorites', 'send_inquiries'],
-      limits: { maxListings: 1, maxFavorites: 10 },
+      features: [
+        'browse_listings',
+        'save_favorites',
+        'send_inquiries',
+      ],
+      limits: { maxListings: 1, maxFavorites: 10, maxSavedSearches: 3 },
       sortOrder: 1,
+    },
+    {
+      name: 'Buyer',
+      slug: 'buyer',
+      description: 'For serious buyers who want early access and insights',
+      tierType: TierType.BUYER_PRO,
+      priceMonthlyGhs: 49,
+      priceYearlyGhs: 490,
+      features: [
+        'browse_listings',
+        'save_favorites',
+        'send_inquiries',
+        'saved_search_alerts',
+        'price_drop_alerts',
+        'exclusive_listings',
+        'due_diligence_basic',
+      ],
+      limits: { maxSavedSearches: 20, maxAlerts: 30 },
+      sortOrder: 2,
     },
     {
       name: 'Seller',
       slug: 'seller',
-      description: 'For serious land sellers who want more visibility',
+      description: 'For land sellers who want more visibility and tools',
       tierType: TierType.SELLER_PRO,
       priceMonthlyGhs: 99,
       priceYearlyGhs: 990,
@@ -284,26 +307,7 @@ async function main() {
         'priority_verification',
         'virtual_tours',
       ],
-      limits: { maxListings: 20, maxFeatured: 5 },
-      sortOrder: 2,
-    },
-    {
-      name: 'Buyer',
-      slug: 'buyer',
-      description: 'For buyers who want early access and insights',
-      tierType: TierType.BUYER_PRO,
-      priceMonthlyGhs: 49,
-      priceYearlyGhs: 490,
-      features: [
-        'browse_listings',
-        'save_favorites',
-        'send_inquiries',
-        'saved_search_alerts',
-        'price_drop_alerts',
-        'exclusive_listings',
-        'due_diligence_basic',
-      ],
-      limits: { maxSavedSearches: 10, maxAlerts: 20 },
+      limits: { maxListings: 25, maxFeatured: 5 },
       sortOrder: 3,
     },
     {
@@ -324,18 +328,20 @@ async function main() {
         'client_management',
         'booking_calendar',
         'review_management',
+        'lead_generation',
       ],
-      limits: { maxServices: 20, maxClients: -1 },
+      limits: { maxServices: 20, maxClients: -1, maxLeads: 100 },
       sortOrder: 4,
     },
     {
       name: 'Agent',
       slug: 'agent',
-      description: 'For real estate agents and agencies',
+      description: 'For real estate agents and agencies with full access',
       tierType: TierType.AGENT_PRO,
       priceMonthlyGhs: 299,
       priceYearlyGhs: 2990,
       features: [
+        // All seller features
         'browse_listings',
         'save_favorites',
         'send_inquiries',
@@ -344,18 +350,22 @@ async function main() {
         'bulk_upload',
         'priority_verification',
         'virtual_tours',
+        // All buyer features
         'saved_search_alerts',
         'price_drop_alerts',
         'exclusive_listings',
         'due_diligence_basic',
-        'lead_generation',
+        'due_diligence_comprehensive',
+        // Professional features
         'verified_badge',
         'priority_placement',
         'professional_profile',
+        'lead_generation',
         'client_management',
+        // Agent-specific
         'team_management',
       ],
-      limits: { maxListings: -1, maxTeamMembers: 10 },
+      limits: { maxListings: -1, maxTeamMembers: 10, maxFeatured: 20 },
       sortOrder: 5,
     },
   ];
